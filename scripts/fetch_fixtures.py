@@ -1,7 +1,7 @@
 """抓取并保存测试夹具（真实的 WMO 响应样本）。
 
 用途（可复用）：
-    python fetch_fixtures.py
+    python scripts/fetch_fixtures.py
 输出：
     tests/fixtures/<cityId>_<lang>.json   —— 原始响应（UTF-8 无 BOM）
 
@@ -19,7 +19,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.http_client import HttpClient, city_data_url  # noqa: E402
 from src.config_loader import load_config  # noqa: E402
@@ -38,7 +38,7 @@ SAMPLES = {
 
 
 def main() -> int:
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[1]
     fixtures = root / "tests" / "fixtures"
     fixtures.mkdir(parents=True, exist_ok=True)
 

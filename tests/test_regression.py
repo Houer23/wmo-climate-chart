@@ -366,7 +366,7 @@ def test_compare_render() -> None:
 # ======================= 5. 城市索引 =======================
 
 def test_city_index_flatten() -> None:
-    raw = json.loads((ROOT / "过程文件" / "侦察" / "_recon_country.json").read_text(encoding="utf-8-sig"))
+    raw = json.loads((ROOT / "tests" / "fixtures" / "country_index_zh.json").read_text(encoding="utf-8-sig"))
     entries = _flatten(raw)
     check("索引城市数 > 3000", len(entries) > 3000, str(len(entries)))
     check("索引含语言键未污染", all(e.city_id > 0 for e in entries))

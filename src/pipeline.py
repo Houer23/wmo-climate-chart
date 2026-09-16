@@ -36,6 +36,7 @@ class CityResult:
     city: Optional[CityClimate] = None
     tables: list[Path] = field(default_factory=list)
     charts: list[Path] = field(default_factory=list)
+    series: list[str] = field(default_factory=list)  # 本次实际绘出的要素名（图例名）
     profile: str = ""
 
 
@@ -43,6 +44,7 @@ class CityResult:
 class RunSummary:
     results: list[CityResult] = field(default_factory=list)
     compare_charts: list[Path] = field(default_factory=list)
+    compare_series: list[str] = field(default_factory=list)  # 对比图实际绘出的要素
     mode: str = "city"  # city | compare
 
     @property
@@ -55,7 +57,10 @@ class RunSummary:
 
     def describe(self) -> str:
         if self.mode == "compare":
-            lines = [f"取数成功 {self.ok_count} 个，失败 {self.fail_count} 个"]
+            head = f"取数成功 {self.ok_count} 个，失败 {self.fail_count} 个"
+            if self.compare_series:
+                head += f"，对比要素：{'、'.join(self.compare_series)}"
+            lines = [head]
             for r in self.results:
                 state = "成功" if r.ok else "失败"
                 suffix = "" if r.ok else f"：{r.error}"
@@ -65,8 +70,9 @@ class RunSummary:
         lines = [f"成功 {self.ok_count} 个，失败 {self.fail_count} 个"]
         for r in self.results:
             if r.ok:
+                series_note = f"，绘出要素：{'、'.join(r.series)}" if r.series else ""
                 lines.append(f"  [成功] {r.city_name}（{r.city_id}）："
-                             f"{len(r.tables)} 个表格，{len(r.charts)} 张图")
+                             f"{len(r.tables)} 个表格，{len(r.charts)} 张图{series_note}")
             else:
                 lines.append(f"  [失败] cityId {r.city_id}：{r.error}")
         return "\n".join(lines)
@@ -226,7 +232,9 @@ def process_city(client: HttpClient, cfg: dict[str, Any], city_id: int,
     try:
         writable = _apply_overwrite(chart_paths, policy)
         if writable:
-            result.charts.extend(render_city_chart(city, cfg, writable, logger))
+            report: dict[str, Any] = {}
+            result.charts.extend(render_city_chart(city, cfg, writable, logger, report))
+            result.series = [str(item.get("label", "")) for item in report.get("series") or []]
     except ChartError as exc:
         if logger:
             logger.warning(f"绘图跳过：{exc}")
@@ -236,8 +244,9 @@ def process_city(client: HttpClient, cfg: dict[str, Any], city_id: int,
 
     result.ok = True
     if logger:
+        series_note = f"；绘出要素：{'、'.join(result.series)}" if result.series else ""
         logger.info(f"{city.city_name}（{city.city_id}）完成："
-                    f"{len(result.tables)} 个表格，{len(result.charts)} 张图")
+                    f"{len(result.tables)} 个表格，{len(result.charts)} 张图{series_note}")
     return result
 
 
@@ -298,9 +307,12 @@ def run_compare(cfg: dict[str, Any], city_ids: list[int], logger=None,
     writable = _apply_overwrite(charts, policy)
     if writable:
         try:
-            summary.compare_charts = render_comparison_chart(cities, cfg, writable, logger)
+            report: dict[str, Any] = {}
+            summary.compare_charts = render_comparison_chart(cities, cfg, writable, logger, report)
+            summary.compare_series = [str(item) for item in report.get("series") or []]
             if logger:
-                logger.info(f"对比图已生成：{len(summary.compare_charts)} 张")
+                series_note = f"（要素：{'、'.join(summary.compare_series)}）" if summary.compare_series else ""
+                logger.info(f"对比图已生成：{len(summary.compare_charts)} 张{series_note}")
         except ChartError as exc:
             if logger:
                 logger.error(f"对比图生成失败：{exc}")

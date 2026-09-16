@@ -118,11 +118,12 @@ DrawClimateChart/
 │   ├── table_writer.py       # 表格：CSV / Markdown / XLSX / JSON
 │   ├── chart.py              # 绘图：matplotlib 双轴（+第三轴），全参数可配
 │   └── pipeline.py           # 编排：单城 / 批量 / 对比
+├── scripts/                  # 可复用工具（夹具抓取 / CLI 验收 / 缺失值扫描）
 ├── tests/
-│   ├── test_regression.py    # 回归测试（离线可跑，424 项断言）
-│   └── fixtures/             # 真实响应样本（覆盖各类边界）
-├── output/                   # 交付物：表格与图
-└── 过程文件/                  # 过程文件（脚本 / 侦察 / 校验渲染 / 中间产物 / 日志）
+│   ├── test_regression.py    # 回归测试（离线可跑，122 项断言）
+│   └── fixtures/             # 真实响应样本（含城市索引与 samples/ 抽样数据）
+├── output/                   # 交付物：表格与图（生成物，不入库）
+└── 过程文件/                  # 过程留证（侦察 / 校验渲染 / 中间产物 / 日志）
 ```
 
 ---
@@ -191,6 +192,7 @@ python wmo_climate.py --init-profile my_style  # 导出全量模板后再改
 - **表格**：CSV（UTF-8 BOM，Excel 直接打开不乱码）、Markdown、XLSX、JSON
 - **图**：PNG（默认）/ SVG / PDF
 - 覆盖策略 `output.overwrite`：`overwrite` / `skip` / `timestamp`
+- **运行信息**：日志与结果汇总会列出每个城市**本次实际绘出的要素**（如「绘出要素：日均最高气温、日均最低气温、平均总降水」），已扣除配置禁用、所属轴关闭与无数据自动降级的元素；对比模式另给出「对比要素」。
 
 已完成示例见 `output/` 目录。
 

@@ -614,7 +614,8 @@ def _context(city: CityClimate, cfg: dict[str, Any]) -> dict[str, str]:
 # ---- 主入口：单城市 ----------------------------------------------------
 
 def render_city_chart(city: CityClimate, cfg: dict[str, Any],
-                      out_paths: list[Path], logger=None) -> list[Path]:
+                      out_paths: list[Path], logger=None,
+                      report: Optional[dict[str, Any]] = None) -> list[Path]:
     if not city.has_climate:
         raise ChartError(f"{city.city_name}（cityId {city.city_id}）没有气候数据，无法绘图")
 
@@ -677,6 +678,18 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
     if not handles:
         plt.close(fig)
         raise ChartError(f"{city.city_name} 没有任何可绘制的元素，请检查配置中 series 的 enabled")
+
+    # 回填实际绘出的要素（供上层日志/汇总展示）
+    if report is not None:
+        report["series"] = [
+            {
+                "key": key,
+                "label": _series_label(city, key, scfg),
+                "chart_type": str(scfg.get("chart_type", "line")),
+                "axis": str(scfg.get("axis", "primary")),
+            }
+            for key, scfg, _arr in series_list
+        ]
 
     # ---- 轴样式 ----
     axis_specs = [
@@ -757,7 +770,8 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
 # ---- 主入口：多城市对比 ------------------------------------------------
 
 def render_comparison_chart(cities: list[CityClimate], cfg: dict[str, Any],
-                            out_paths: list[Path], logger=None) -> list[Path]:
+                            out_paths: list[Path], logger=None,
+                            report: Optional[dict[str, Any]] = None) -> list[Path]:
     usable = [c for c in cities if c.has_climate]
     if not usable:
         raise ChartError("参与对比的城市都没有气候数据，无法绘图")
@@ -923,4 +937,8 @@ def render_comparison_chart(cities: list[CityClimate], cfg: dict[str, Any],
     _add_legend(ax, handles, merged)
     _add_credit(fig, cfg, context)
     _apply_layout(fig, cfg)
+    if report is not None:
+        report["series"] = [metric_label]
+        report["metric"] = metric_label
+        report["city_count"] = len(usable)
     return _save(fig, out_paths, cfg)

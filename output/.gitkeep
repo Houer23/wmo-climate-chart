@@ -1,0 +1,2 @@
+# 占位文件：保持 output/ 目录结构。
+# 该目录下的表格与图均为生成物，已由 .gitignore 忽略，运行 wmo_climate.py 可重新产出。
