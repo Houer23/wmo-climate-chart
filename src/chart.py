@@ -23,6 +23,15 @@ TEMP_KEYS = ("minTemp", "maxTemp", "meanTemp")
 RAIN_KEYS = ("rainfall", "raindays")
 AXIS_KEYS = ("primary", "secondary", "tertiary")
 
+# 绘制顺序：柱状类先画（打底），折线/曲线类后画（压在上层）。
+# 图例顺序不受影响，仍按 series.order_in_legend。
+BAR_CHART_TYPES = {"bar", "barh"}
+
+
+def _draw_priority(scfg: dict[str, Any]) -> int:
+    """绘图顺序优先级：柱状 = 0（先画），其余 = 1（后画）。"""
+    return 0 if str(scfg.get("chart_type", "line")).lower() in BAR_CHART_TYPES else 1
+
 
 class ChartError(RuntimeError):
     """绘图失败。"""
@@ -116,6 +125,11 @@ def setup_style(cfg: dict[str, Any]) -> None:
     plt.rcParams["font.size"] = float(fig_cfg.get("font_size", 11))
     plt.rcParams["font.weight"] = str(fig_cfg.get("font_weight", "normal"))
     plt.rcParams["axes.unicode_minus"] = bool(fig_cfg.get("axes_unicode_minus", True))
+    # 矢量文本：svg / pdf 里的文字保持为「可编辑的文本元素」，而非轮廓路径
+    #   svg_fonttype: none = 输出 <text>（可用 AI / Inkscape 直接改字）；path = 转轮廓（外观绝对一致但不可编辑）
+    #   pdf_fonttype: 42  = TrueType 内嵌，文字可选中 / 可检索 / 可编辑；3 = Type 3（部分工具不可编辑）
+    plt.rcParams["svg.fonttype"] = str(fig_cfg.get("svg_fonttype", "none")).lower()
+    plt.rcParams["pdf.fonttype"] = int(fig_cfg.get("pdf_fonttype", 42))
     plt.rcParams["axes.facecolor"] = _resolve_axes_facecolor(cfg)
     plt.rcParams["savefig.facecolor"] = str(fig_cfg.get("facecolor", "#ffffff"))
     plt.rcParams["figure.autolayout"] = False
@@ -210,14 +224,22 @@ def _configure_y_axis(ax, ax_cfg: dict[str, Any], values: Sequence[np.ndarray],
 
     label = str(ax_cfg.get("label_text", "") or "")
     if label:
-        ax.set_ylabel(
-            label,
-            fontsize=float(ax_cfg.get("label_fontsize", 12)),
-            color=str(ax_cfg.get("label_color", "#2c3e50")),
-            fontweight=str(ax_cfg.get("label_fontweight", "bold")),
-            rotation=ax_cfg.get("label_rotation", 90),
-            labelpad=float(ax_cfg.get("label_pad", 10)),
-        )
+        label_kwargs: dict[str, Any] = {
+            "fontsize": float(ax_cfg.get("label_fontsize", 12)),
+            "color": str(ax_cfg.get("label_color", "#2c3e50")),
+            "fontweight": str(ax_cfg.get("label_fontweight", "bold")),
+            "rotation": ax_cfg.get("label_rotation", 90),
+            "labelpad": float(ax_cfg.get("label_pad", 10)),
+        }
+        # 标题对齐：横排时用 label_align 实现「与刻度标签左/右对齐」，
+        # 用 label_valign 固定垂直基准，保证左右两轴标题处于同一行。
+        align = str(ax_cfg.get("label_align", "auto")).lower()
+        if align in ("left", "center", "right"):
+            label_kwargs["ha"] = align
+        valign = str(ax_cfg.get("label_valign", "auto")).lower()
+        if valign in ("top", "center", "bottom", "baseline", "center_baseline"):
+            label_kwargs["va"] = valign
+        ax.set_ylabel(label, **label_kwargs)
         _y_label_position(ax, ax_cfg, default_x)
 
     # 量程
@@ -391,6 +413,75 @@ def _draw_zeroline(ax, cfg: dict[str, Any]) -> None:
                linestyle=str(zcfg.get("linestyle", "-")),
                linewidth=float(zcfg.get("linewidth", 0.8)),
                alpha=float(zcfg.get("alpha", 0.8)), zorder=1)
+
+
+def _stack_axes(cfg: dict[str, Any], axis_map: dict[str, Any],
+                by_axis: dict[str, list[tuple[str, dict[str, Any], np.ndarray]]]) -> str:
+    """调整各坐标轴的叠放层次，保证**折线始终绘制在柱状图之上**。
+
+    matplotlib 把同一图中的每个坐标轴当作整体按 zorder 依次绘制，``twinx`` 轴按加入
+    顺序后绘制，因此「降水柱在副轴」时会整体盖住「主/三轴上的折线」。这里按「该轴是否
+    含折线」分层：含折线的轴置于上层；并把底色交给最底层、其余轴透明，避免上层轴遮住
+    下层的柱状图。
+    """
+    present = [a for a in AXIS_KEYS if axis_map.get(a) is not None]
+    if not present:
+        return "primary"
+
+    def _has_line(axis_key: str) -> bool:
+        return any(str(s.get("chart_type", "line")).lower() not in BAR_CHART_TYPES
+                   for _key, s, _arr in by_axis.get(axis_key) or [])
+
+    for axis_key in present:
+        axis_map[axis_key].set_zorder(1 if _has_line(axis_key) else 0)
+
+    # 最先绘制的轴负责绘制底色，其余轴透明（否则上层轴的底色会遮住下层内容）
+    bottom = min(present, key=lambda a: (axis_map[a].get_zorder(), AXIS_KEYS.index(a)))
+    for axis_key in present:
+        axis_map[axis_key].patch.set_visible(axis_key == bottom)
+    axis_map[bottom].set_facecolor(_resolve_axes_facecolor(cfg))
+    return bottom
+
+
+def _draw_grid(grid_owner, axis_map: dict[str, Any], bottom_key: str,
+               grid_cfg: dict[str, Any]) -> None:
+    """绘制网格。
+
+    柱状图位于下层时，网格改画在**最底层坐标轴**上（位置仍与 `grid_owner` 的刻度对齐），
+    这样网格既不会压住柱状图，也不会压住折线。
+    """
+    bottom = axis_map[bottom_key]
+    axis = str(grid_cfg.get("axis", "y"))
+    which = str(grid_cfg.get("which", "major"))
+    style = {
+        "color": str(grid_cfg.get("color", "#c9d3dd")),
+        "linestyle": str(grid_cfg.get("linestyle", "--")),
+        "linewidth": float(grid_cfg.get("linewidth", 0.7)),
+        "alpha": float(grid_cfg.get("alpha", 0.75)),
+        "zorder": float(grid_cfg.get("zorder", 0)),
+    }
+
+    if bottom is grid_owner:
+        bottom.grid(True, axis=axis, which=which, **style)
+        return
+
+    if axis in ("y", "both"):
+        lo, hi = grid_owner.get_ylim()
+        blo, bhi = bottom.get_ylim()
+        span = (hi - lo) or 1.0
+        ticks: list[float] = []
+        if which in ("major", "both"):
+            ticks += list(grid_owner.get_yticks())
+        if which in ("minor", "both"):
+            ticks += list(grid_owner.get_yticks(minor=True))
+        for value in ticks:
+            if not np.isfinite(value):
+                continue
+            frac = (value - lo) / span
+            bottom.axhline(blo + frac * (bhi - blo), **style)
+
+    if axis in ("x", "both"):
+        bottom.grid(True, axis="x", which=which, **style)
 
 
 # ---- 单个元素绘制 ------------------------------------------------------
@@ -583,13 +674,23 @@ def _apply_layout(fig, cfg: dict[str, Any]) -> None:
 
 def _save(fig, out_paths: list[Path], cfg: dict[str, Any]) -> list[Path]:
     dpi = float(cfg["output"].get("chart_dpi", cfg["figure"].get("dpi", 144)))
+    constrained = str(cfg["figure"].get("layout")) == "constrained"
+    # 轴标题可能被 label_x / label_y 移到坐标轴之外；matplotlib 的自动 bbox 不总能覆盖这类
+    # 手动定位的标签，会被 tight 裁剪掉。这里在**默认艺术家集合**基础上补入轴标签
+    # （注意 bbox_extra_artists 是替换而非追加，直接用会导致图例等被排除）。
+    extra_artists: Optional[list[Any]] = None
+    if not constrained:
+        extra_artists = list(fig.get_default_bbox_extra_artists())
+        extra_artists += [a.yaxis.label for a in fig.axes]
+        extra_artists += [a.xaxis.label for a in fig.axes]
     saved: list[Path] = []
     for path in out_paths:
         fmt = path.suffix.lstrip(".").lower() or "png"
         fig.savefig(path, dpi=dpi, format=fmt,
                     facecolor=cfg["figure"].get("facecolor", "#ffffff"),
                     edgecolor=cfg["figure"].get("edgecolor", "none"),
-                    bbox_inches="tight" if str(cfg["figure"].get("layout")) != "constrained" else None)
+                    bbox_inches=None if constrained else "tight",
+                    bbox_extra_artists=extra_artists)
         saved.append(path)
     plt.close(fig)
     return saved
@@ -649,13 +750,17 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
             extra.grid(False)
 
     axis_map = {"primary": ax, "secondary": ax2, "tertiary": ax3}
+    bottom_key = _stack_axes(cfg, axis_map, by_axis)
 
     x = _configure_x_axis(ax, city, cfg)
     _draw_background(ax, city, cfg)
 
     # ---- 绘制元素 ----
-    handles: list[Any] = []
-    for key, scfg, arr in series_list:
+    # 绘图顺序固定为「先柱状、后折线」（同组内按 order_in_legend）；
+    # 图例顺序仍按 order_in_legend，不受绘制顺序影响。
+    handles_by_key: dict[str, Any] = {}
+    draw_order = sorted(series_list, key=lambda item: _draw_priority(item[1]))
+    for key, scfg, arr in draw_order:
         target = axis_map.get(str(scfg.get("axis", "primary")))
         if target is None:
             continue
@@ -672,9 +777,10 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
             scfg["_base_values"] = base_vals
         handle = _plot_one(target, key, scfg, x, arr, color)
         if handle is not None:
-            handles.append(handle)
+            handles_by_key[key] = handle
         _draw_data_labels(target, scfg, x, arr, color)
 
+    handles = [handles_by_key[k] for k, _scfg, _arr in series_list if k in handles_by_key]
     if not handles:
         plt.close(fig)
         raise ChartError(f"{city.city_name} 没有任何可绘制的元素，请检查配置中 series 的 enabled")
@@ -720,16 +826,7 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
 
     grid_cfg = fig_cfg.get("grid") or {}
     if grid_cfg.get("show", True):
-        ax.grid(
-            True,
-            axis=str(grid_cfg.get("axis", "y")),
-            which=str(grid_cfg.get("which", "major")),
-            color=str(grid_cfg.get("color", "#c9d3dd")),
-            linestyle=str(grid_cfg.get("linestyle", "--")),
-            linewidth=float(grid_cfg.get("linewidth", 0.7)),
-            alpha=float(grid_cfg.get("alpha", 0.75)),
-            zorder=float(grid_cfg.get("zorder", 0)),
-        )
+        _draw_grid(ax, axis_map, bottom_key, grid_cfg)
     ax.set_axisbelow(True)
     _draw_zeroline(ax, cfg)
 

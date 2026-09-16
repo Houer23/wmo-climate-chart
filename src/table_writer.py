@@ -68,51 +68,72 @@ def _month_headers(city: CityClimate, cfg: dict[str, Any]) -> list[str]:
     return headers
 
 
-def _row_values(city: CityClimate, key: str, cfg: dict[str, Any]) -> list[Optional[float]]:
-    temp_unit = (cfg["data"].get("temp_unit") or "C").upper()
-    rain_unit = (cfg["data"].get("rain_unit") or "mm").lower()
-    values = city.values(key, temp_unit, rain_unit)
-    if cfg["table"].get("include_annual", cfg["data"].get("include_annual", False)):
-        values = values + [city.annual(key, temp_unit, rain_unit)]
-    return values
+def build_values(city: CityClimate, cfg: dict[str, Any]
+                 ) -> tuple[list[str], list[str], list[list[Optional[float]]]]:
+    """返回 (表头, 行标签, 单元格**原始数值**)；``None`` 表示缺失。
 
-
-def build_matrix(city: CityClimate, cfg: dict[str, Any]) -> tuple[list[str], list[str], list[list[str]]]:
-    """返回 (表头, 行标签, 每个单元格的字符串值)。"""
+    结构与 :func:`build_matrix` 一致，供需要真实数值的写出器（XLSX）使用，
+    避免把数字以字符串形式写入而丢失数值类型。
+    """
     table_cfg = cfg["table"]
-    missing = table_cfg.get("missing_placeholder", "—")
     rows = [normalize_series_key(k) for k in table_cfg.get("rows") or []]
     month_headers = _month_headers(city, cfg)
+    temp_unit = (cfg["data"].get("temp_unit") or "C").upper()
+    rain_unit = (cfg["data"].get("rain_unit") or "mm").lower()
+    use_annual = bool(table_cfg.get("include_annual", cfg["data"].get("include_annual", False)))
 
     if table_cfg.get("transpose"):
         # 转置：月份成为行，元素成为列（年份作为最后一行）
-        labels = month_headers
         header = ["月份"] + [series_label(city, k, cfg) for k in rows]
-        temp_unit = (cfg["data"].get("temp_unit") or "C").upper()
-        rain_unit = (cfg["data"].get("rain_unit") or "mm").lower()
-        use_annual = bool(table_cfg.get("include_annual", cfg["data"].get("include_annual", False)))
-        cells = []
+        cells: list[list[Optional[float]]] = []
         for idx in range(len(month_headers)):
-            line: list[str] = []
+            line: list[Optional[float]] = []
             for key in rows:
                 if idx < len(city.months):
-                    value = city.months[idx].value(key, temp_unit, rain_unit)
-                    line.append(format_number(value, _precision(cfg, key), missing))
+                    line.append(city.months[idx].value(key, temp_unit, rain_unit))
                 elif use_annual:
-                    line.append(format_number(city.annual(key, temp_unit, rain_unit),
-                                              _precision(cfg, "annual"), missing))
+                    line.append(city.annual(key, temp_unit, rain_unit))
                 else:
-                    line.append(missing)
+                    line.append(None)
             cells.append(line)
-        return header, labels, cells
+        return header, month_headers, cells
 
     header = ["月份"] + month_headers
     labels: list[str] = []
     cells = []
     for key in rows:
         labels.append(series_label(city, key, cfg))
-        prec = _precision(cfg, key)
-        cells.append([format_number(v, prec, missing) for v in _row_values(city, key, cfg)])
+        values = list(city.values(key, temp_unit, rain_unit))
+        if use_annual:
+            values.append(city.annual(key, temp_unit, rain_unit))
+        cells.append(values)
+    return header, labels, cells
+
+
+def build_matrix(city: CityClimate, cfg: dict[str, Any]) -> tuple[list[str], list[str], list[list[str]]]:
+    """返回 (表头, 行标签, 每个单元格的字符串值) —— 供 CSV / Markdown 使用。"""
+    table_cfg = cfg["table"]
+    missing = table_cfg.get("missing_placeholder", "—")
+    rows = [normalize_series_key(k) for k in table_cfg.get("rows") or []]
+    use_annual = bool(table_cfg.get("include_annual", cfg["data"].get("include_annual", False)))
+    header, labels, raw = build_values(city, cfg)
+
+    cells: list[list[str]] = []
+    if table_cfg.get("transpose"):
+        last = len(labels) - 1
+        for idx, line in enumerate(raw):
+            cells.append([
+                format_number(
+                    value,
+                    _precision(cfg, "annual" if (use_annual and idx == last) else rows[j]),
+                    missing,
+                )
+                for j, value in enumerate(line)
+            ])
+    else:
+        for i, line in enumerate(raw):
+            prec = _precision(cfg, rows[i])
+            cells.append([format_number(v, prec, missing) for v in line])
     return header, labels, cells
 
 
@@ -197,7 +218,7 @@ def write_xlsx(path: Path, city: CityClimate, cfg: dict[str, Any]) -> Path:
         raise RuntimeError("写出 XLSX 需要 openpyxl，请先安装：pip install openpyxl") from exc
 
     xcfg = cfg["table"].get("xlsx") or {}
-    header, labels, cells = build_matrix(city, cfg)
+    header, labels, cells = build_values(city, cfg)
     notes = build_notes(city, cfg)
 
     wb = Workbook()
@@ -230,6 +251,7 @@ def write_xlsx(path: Path, city: CityClimate, cfg: dict[str, Any]) -> Path:
         cell.border = border
 
     num_fmt = str(xcfg.get("number_format", "0.0"))
+    missing = cfg["table"].get("missing_placeholder", "—")
     for i, (label, values) in enumerate(zip(labels, cells), start=1):
         row_idx = header_row + i
         cell = ws.cell(row=row_idx, column=1, value=label)
@@ -237,14 +259,18 @@ def write_xlsx(path: Path, city: CityClimate, cfg: dict[str, Any]) -> Path:
         cell.border = border
         if i % 2 == 0:
             cell.fill = zebra_fill
-        for c, text in enumerate(values, start=2):
-            value_cell = ws.cell(row=row_idx, column=c, value=text)
+        for c, value in enumerate(values, start=2):
+            if value is None:
+                # 缺失值：写占位符文本
+                value_cell = ws.cell(row=row_idx, column=c, value=missing)
+            else:
+                # 真实数值：写 float，Excel 才能识别为数字并参与计算
+                value_cell = ws.cell(row=row_idx, column=c, value=float(value))
+                value_cell.number_format = num_fmt
             value_cell.alignment = center
             value_cell.border = border
             if i % 2 == 0:
                 value_cell.fill = zebra_fill
-            if text and text != cfg["table"].get("missing_placeholder", "—"):
-                value_cell.number_format = num_fmt
 
     width = float(xcfg.get("column_width", 13))
     ws.column_dimensions["A"].width = float(xcfg.get("first_column_width", 20))

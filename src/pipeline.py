@@ -110,15 +110,26 @@ def _safe(text: str) -> str:
     return cleaned or "unnamed"
 
 
-def output_basename(cfg: dict[str, Any], city: CityClimate) -> str:
-    template = cfg["output"].get("name_template", "{city}_{city_id}_climate")
-    return _safe(template.format(
+def _format_basename(cfg: dict[str, Any], city: CityClimate, key: str, default: str) -> str:
+    """按模板生成文件名主干；模板为空时回退默认值。"""
+    template = cfg["output"].get(key) or default
+    return _safe(str(template).format(
         city=city.city_name or f"city{city.city_id}",
         city_id=city.city_id,
         member=city.member.mem_name,
         station=city.station_name,
         profile=cfg.get("profile_name", ""),
     ))
+
+
+def output_basename(cfg: dict[str, Any], city: CityClimate) -> str:
+    """图片文件名主干（默认**带**配置名后缀）。"""
+    return _format_basename(cfg, city, "name_template", "{city}_{city_id}_climate_{profile}")
+
+
+def table_basename(cfg: dict[str, Any], city: CityClimate) -> str:
+    """表格文件名主干（默认**不带**配置名后缀）。"""
+    return _format_basename(cfg, city, "table_name_template", "{city}_{city_id}_climate")
 
 
 def compare_basename(cfg: dict[str, Any], cities: list[CityClimate]) -> str:
@@ -212,11 +223,12 @@ def process_city(client: HttpClient, cfg: dict[str, Any], city_id: int,
     result.city = city
     result.city_name = city.city_name
     target_dir.mkdir(parents=True, exist_ok=True)
-    basename = output_basename(cfg, city)
+    chart_base = output_basename(cfg, city)   # 图：带配置名后缀
+    table_base = table_basename(cfg, city)    # 表格：不带配置名后缀
     policy = str(cfg["output"].get("overwrite", "overwrite"))
 
     # 表格
-    table_paths = [target_dir / f"{basename}{ext}"
+    table_paths = [target_dir / f"{table_base}{ext}"
                    for ext in _table_extensions(cfg)]
     try:
         for path in _apply_overwrite(table_paths, policy):
@@ -227,7 +239,7 @@ def process_city(client: HttpClient, cfg: dict[str, Any], city_id: int,
             logger.error(f"表格写出失败：{exc}")
 
     # 图表
-    chart_paths = [target_dir / f"{basename}.{fmt}"
+    chart_paths = [target_dir / f"{chart_base}.{fmt}"
                    for fmt in (cfg["output"].get("chart_formats") or [])]
     try:
         writable = _apply_overwrite(chart_paths, policy)

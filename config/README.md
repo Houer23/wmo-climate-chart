@@ -7,8 +7,31 @@
 **配置来源与优先级**（后者覆盖前者）：
 
 1. 内置默认值 `DEFAULTS`（= 下方所有默认值）
-2. `config/profiles.json` 中选定的配置（`--profile <名称>`；未指定用 `default_profile`）
+2. 配置文件中选定的配置：内置 `config/profiles.json` 与自定义 **`config/custom.json`** 合并
+   （**同名时自定义优先**）；`--profile <名称>`；未指定用 `default_profile`
 3. 命令行 `--set 键=值`（可重复，点路径，值按 JSON/数字/布尔自动识别）
+
+**自定义配置**：全部自定义配置集中写在 `config/custom.json` 的 `profiles` 下（一配置一项），
+与内置配置合并共存，无需改动 `profiles.json`。示例：
+
+```jsonc
+{
+  "profiles": {
+    "简图": {
+      "description": "长画布（2:3），仅气温 + 降水，无标题，图例置底",
+      "figure": { "figsize": [8, 12], "title": { "show": false } },
+      "series": {
+        "minTemp": { "enabled": false },
+        "maxTemp": { "enabled": false },
+        "meanTemp": { "enabled": true, "label": "气温", "color": "#d62728" },
+        "rainfall": { "label": "降水", "color": "#1f77b4" }
+      },
+      "axes_primary": { "label_text": "气温" },
+      "axes_secondary": { "label_text": "降水" }
+    }
+  }
+}
+```
 
 **合并规则**：对象递归深合并；数组整体替换（不是拼接）；因此局部配置只需写想改的项。
 
@@ -78,8 +101,9 @@
 | 键 | 类型 | 默认 | 说明 |
 |---|---|---|---|
 | `out_dir` | path | `"output"` | 输出目录（相对路径基于项目根；`--out-dir` 可覆盖） |
-| `name_template` | str | `"{city}_{city_id}_climate"` | 文件名模板（不含扩展名） |
-| `compare_name_template` | str | `"{city_count}城对比_{metric}"` | 对比图文件名模板 |
+| `name_template` | str | `"{city}_{city_id}_climate_{profile}"` | **图片**文件名模板（不含扩展名）；`{profile}` 使图片**以配置名作后缀** |
+| `table_name_template` | str | `"{city}_{city_id}_climate"` | **表格**文件名模板；默认**不带**配置名后缀 |
+| `compare_name_template` | str | `"{city_count}城对比_{metric}_{profile}"` | 对比图文件名模板 |
 | `table_formats` | array | `["csv","md","xlsx"]` | 表格格式：`csv` / `md` / `xlsx` / `json`（空数组=不出表格） |
 | `chart_formats` | array | `["png"]` | 图片格式：`png` / `svg` / `pdf` / `jpg` / `webp`（空数组=不出图） |
 | `chart_dpi` | int | `144` | 位图 DPI（`svg`/`pdf` 为矢量不受影响） |
@@ -93,8 +117,8 @@
 |---|---|---|---|
 | `figsize` | [宽,高] 英寸 | `[12.0, 6.0]` | 画布尺寸 |
 | `dpi` | int | `144` | 画布分辨率 |
-| `facecolor` | color | `"#ebf1f5"` | 画布底色 |
-| `axes_facecolor` | color/`auto` | `"auto"` | 绘图区底色；`auto` = 由 `facecolor` 向白混合派生 |
+| `facecolor` | color | `"#ebf1f5"` | 画布底色；支持 8 位 HEX（含透明度），如 `#ffffff80` = 白色 50% 透明 |
+| `axes_facecolor` | color/`auto`/`none` | `"auto"` | 绘图区底色；`auto` = 由 `facecolor` 向白混合派生；`none` = 透明（直接露出画布底色，避免两层半透明叠加导致该区域更不透明） |
 | `edgecolor` | color | `"none"` | 画布边框 |
 | `layout` | str | `"tight"` | 布局：`tight` / `constrained` / `none` |
 | `subplots_adjust.left/right/top/bottom/wspace/hspace` | float/null | `null` | 手动边距（非 null 才生效） |
@@ -102,6 +126,8 @@
 | `font_size` | float | `11` | 全局基准字号 |
 | `font_weight` | str | `"normal"` | 全局字重 |
 | `axes_unicode_minus` | bool | `true` | 负号显示为真减号 |
+| `svg_fonttype` | str | `"none"` | SVG 文字形态：`none` = 保留 `<text>` 文字元素（可在 AI / Inkscape 中直接改字，依赖查看端字体）；`path` = 转轮廓路径（外观绝对一致但不可编辑） |
+| `pdf_fonttype` | int | `42` | PDF 文字形态：`42` = TrueType 内嵌（可选中 / 可检索 / 可编辑）；`3` = Type 3 |
 | `title.show` | bool | `true` | **是否显示标题** |
 | `title.text` | str 模板 | `"{city} 气候统计"` | 标题文本 |
 | `title.fontsize` / `color` / `fontweight` / `pad` | — | `16` / `#2c3e50` / `bold` / `14` | 标题样式 |
@@ -149,6 +175,8 @@
 | `label_x` / `label_y` | float/null | `null` | 显式指定标题坐标（轴坐标系比例，优先于 `label_position`） |
 | `label_fontsize` / `label_color` / `label_fontweight` | — | `12` / `#2c3e50` / `bold` | 标题样式 |
 | `label_rotation` | int/str | `90` / `270` | 标题旋转角度 |
+| `label_align` | str | `"auto"` | 标题水平对齐：`auto` / `left` / `center` / `right`（横排时用于与刻度标签左/右对齐） |
+| `label_valign` | str | `"auto"` | 标题垂直基准：`auto` / `top` / `center` / `bottom`（固定后可让左右两轴标题处于同一行） |
 | `label_pad` | float | `10` / `12` | 标题与轴的间距 |
 | `limit` | [min,max] | `[]` | 量程；空数组 = 按数据自动 |
 | `auto_pad_ratio` | float | `0.14` / `0.18` | 自动量程时上下留白比例；柱状轴基线固定为 0 |
@@ -213,7 +241,7 @@
 | `data_labels.show` | bool | `false` | 是否显示数值标签 |
 | `data_labels.fontsize` / `color` / `format` | — | `8.5` / `auto` / `"{:.1f}"` | 标签样式与格式 |
 | `data_labels.offset` / `rotation` / `position` | — | `4.0` / `0` / `top` | 标签偏移/旋转/位置（`top`/`bottom`/`center`） |
-| `order_in_legend` | float | 各元素不同 | 图例与绘制顺序（小者在前） |
+| `order_in_legend` | float | 各元素不同 | 图例顺序（小者在前）；**绘制顺序固定为「先柱状、后折线」**，不受此项影响 |
 
 **各元素默认值（官方页面配色）**
 
@@ -247,7 +275,7 @@
 | `xlsx.header_fill` / `header_font_color` | ARGB | `FF0EBFA2` / `FFFFFFFF` | 表头填充与字色 |
 | `xlsx.zebra_fill` | ARGB | `FFF3F7FA` | 隔行底色 |
 | `xlsx.column_width` / `first_column_width` | float | `13` / `20` | 列宽 |
-| `xlsx.border_color` / `number_format` | ARGB/str | `FFBCC9D4` / `0.0` | 边框色与数字格式 |
+| `xlsx.border_color` / `number_format` | ARGB/str | `FFBCC9D4` / `0.0` | 边框色与数字格式（`number_format` 仅作用于数值单元格） |
 
 ## I. `compare` — 多城市对比图
 

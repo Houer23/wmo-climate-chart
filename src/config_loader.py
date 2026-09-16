@@ -22,6 +22,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULT_PROFILES_PATH = PROJECT_ROOT / "config" / "profiles.json"
 
+# 自定义配置文件：单独存放全部自定义配置（可含任意多个），与内置 config/profiles.json 合并共存，
+# 因此新增/调整自定义配置无需改动内置文件（同名时以本文件为准）。
+CUSTOM_PROFILES_PATH = PROJECT_ROOT / "config" / "custom.json"
+
 
 class ConfigError(RuntimeError):
     """配置无法解析或非法。"""
@@ -161,8 +165,9 @@ DEFAULTS: dict[str, Any] = {
     # ================= C. 输出与文件 =================
     "output": {
         "out_dir": "output",
-        "name_template": "{city}_{city_id}_climate",
-        "compare_name_template": "{city_count}城对比_{metric}",
+        "name_template": "{city}_{city_id}_climate_{profile}",       # 图片：带配置名后缀
+        "table_name_template": "{city}_{city_id}_climate",           # 表格：不带配置名后缀
+        "compare_name_template": "{city_count}城对比_{metric}_{profile}",
         "table_formats": ["csv", "md", "xlsx"],
         "chart_formats": ["png"],
         "chart_dpi": 144,
@@ -185,6 +190,8 @@ DEFAULTS: dict[str, Any] = {
         "font_size": 11,
         "font_weight": "normal",
         "axes_unicode_minus": True,
+        "svg_fonttype": "none",             # none = SVG 文字保留为 <text>（可编辑）；path = 转轮廓路径
+        "pdf_fonttype": 42,                 # 42 = TrueType 内嵌（可选中/可编辑）；3 = Type 3
         "title": {
             "show": True,
             "text": "{city} 气候统计",
@@ -280,6 +287,8 @@ DEFAULTS: dict[str, Any] = {
         "label_color": "#2c3e50",
         "label_fontweight": "bold",
         "label_rotation": 90,               # 0 | 90 | 270 | vertical
+        "label_align": "auto",              # auto | left | center | right（标题水平对齐）
+        "label_valign": "auto",             # auto | top | center | bottom（标题垂直基准）
         "label_pad": 10,
         "limit": [],                        # [] = 自动；否则 [min, max]
         "auto_pad_ratio": 0.14,
@@ -310,6 +319,8 @@ DEFAULTS: dict[str, Any] = {
         "label_color": "#2c3e50",
         "label_fontweight": "bold",
         "label_rotation": 270,
+        "label_align": "auto",
+        "label_valign": "auto",
         "label_pad": 12,
         "limit": [],
         "auto_pad_ratio": 0.18,
@@ -342,6 +353,8 @@ DEFAULTS: dict[str, Any] = {
         "label_color": "#2c3e50",
         "label_fontweight": "bold",
         "label_rotation": 270,
+        "label_align": "auto",
+        "label_valign": "auto",
         "label_pad": 12,
         "limit": [],
         "auto_pad_ratio": 0.18,
@@ -505,19 +518,68 @@ def coerce_value(raw: str) -> Any:
 
 # ---- 配置加载 ----------------------------------------------------------
 
-def load_profiles_file(path: Optional[Path] = None) -> dict[str, Any]:
-    """读取 profiles 文件；不存在则返回空结构（不影响内置默认值可用）。"""
-    target = Path(path) if path else DEFAULT_PROFILES_PATH
-    if not target.exists():
-        return {"default_profile": "default", "styles": {}, "profiles": {}}
+def _load_custom_profiles(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """加载**单个**自定义配置文件，返回 (profiles, styles)。
+
+    推荐结构（与 `profiles.json` 一致，`profiles` 下可放任意多个自定义配置）：
+
+    ```jsonc
+    {
+      "styles":   { "my_style": { ... } },      // 可选，命名样式
+      "profiles": { "简图": { ... }, "投屏": { ... } }
+    }
+    ```
+
+    同时兼容 `--init-profile` 导出的**单配置全量模板**（整个文件即一个配置主体，
+    配置名取 `"name"` 字段或文件名）；其中的 `profile_name` / `profile_description`
+    属运行时字段，加载时忽略。文件不存在则视为无自定义配置。
+    """
+    if not path.exists():
+        return {}, {}
     try:
-        payload = json.loads(target.read_text(encoding="utf-8-sig"))
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
     except ValueError as exc:
-        raise ConfigError(f"配置文件不是合法 JSON：{target}（{exc}）") from exc
+        raise ConfigError(f"自定义配置不是合法 JSON：{path}（{exc}）") from exc
     if not isinstance(payload, dict):
-        raise ConfigError(f"配置文件顶层必须是对象：{target}")
+        raise ConfigError(f"自定义配置顶层必须是对象：{path}")
+
+    if isinstance(payload.get("profiles"), dict):
+        profiles = {str(k): v for k, v in payload["profiles"].items()}
+        styles = payload.get("styles")
+        return profiles, (dict(styles) if isinstance(styles, dict) else {})
+
+    body = dict(payload)
+    name = str(body.pop("name", "") or path.stem)
+    body.pop("profile_name", None)
+    body.pop("profile_description", None)
+    file_styles = body.pop("styles", None)
+    styles = dict(file_styles) if isinstance(file_styles, dict) else {}
+    return {name: body}, styles
+
+
+def load_profiles_file(path: Optional[Path] = None) -> dict[str, Any]:
+    """读取 profiles 文件，并合并 `config/custom.json` 中的自定义配置。
+
+    文件不存在时返回空结构（不影响内置默认值可用）；同名时**自定义配置覆盖内置配置**。
+    """
+    target = Path(path) if path else DEFAULT_PROFILES_PATH
+    payload: dict[str, Any] = {}
+    if target.exists():
+        try:
+            payload = json.loads(target.read_text(encoding="utf-8-sig"))
+        except ValueError as exc:
+            raise ConfigError(f"配置文件不是合法 JSON：{target}（{exc}）") from exc
+        if not isinstance(payload, dict):
+            raise ConfigError(f"配置文件顶层必须是对象：{target}")
+
     payload.setdefault("styles", {})
     payload.setdefault("profiles", {})
+
+    custom_profiles, custom_styles = _load_custom_profiles(CUSTOM_PROFILES_PATH)
+    if custom_styles:
+        payload["styles"] = {**payload["styles"], **custom_styles}
+    if custom_profiles:
+        payload["profiles"] = {**payload["profiles"], **custom_profiles}
     return payload
 
 
@@ -691,6 +753,14 @@ def validate_config(cfg: dict[str, Any]) -> list[str]:
     # 6) 布局与排版
     if cfg["figure"].get("layout") not in ("tight", "constrained", "none"):
         raise ConfigError("figure.layout 只能是 tight / constrained / none")
+    if str(cfg["figure"].get("svg_fonttype", "none")).lower() not in ("none", "path"):
+        raise ConfigError("figure.svg_fonttype 只能是 none（文字元素）或 path（轮廓路径）")
+    try:
+        pdf_fonttype = int(cfg["figure"].get("pdf_fonttype", 42))
+    except (TypeError, ValueError):
+        pdf_fonttype = -1
+    if pdf_fonttype not in (3, 42):
+        raise ConfigError("figure.pdf_fonttype 只能是 42（TrueType）或 3（Type 3）")
 
     return warnings
 

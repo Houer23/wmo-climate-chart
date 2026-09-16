@@ -1,0 +1,81 @@
+{
+  "_readme": "自定义配置：全部自定义配置集中在本文件，与内置 config/profiles.json 合并（同名时以本文件为准）。用法：python wmo_climate.py --city-id 237 --profile 简图",
+  "profiles": {
+    "简图": {
+      "description": "简图：长画布（2:3），仅日均气温 + 平均总降水，无图标题，图例置底，横向网格，200 dpi（png/svg），表格只出 xlsx",
+      "figure": {
+        "figsize": [5, 6],
+        "layout": "none",
+        "subplots_adjust": { "left": 0.05, "bottom": 0.05, "right": 0.95, "top": 0.95 },
+        "facecolor": "#ffffff",
+        "axes_facecolor": "none",
+        "title": { "show": false },
+        "grid": { "show": true, "axis": "y" },
+        "legend": {
+          "loc": "upper center",
+          "bbox_to_anchor": [0.5, -0.035],
+          "ncol": 2
+        }
+      },
+      "series": {
+        "minTemp": { "enabled": false },
+        "maxTemp": { "enabled": false },
+        "meanTemp": {
+          "enabled": true,
+          "label": "气温",
+          "chart_type": "smooth",
+          "linestyle": "-",
+          "color": "#ec008c",
+          "marker": "o",
+          "markersize": 5.0,
+          "data_labels": {
+            "show": true,
+            "fontsize": 9,
+            "color": "auto",
+            "format": "{:.1f}",
+            "offset": 8.0,
+            "rotation": 0,
+            "position": "top"
+          }
+        },
+        "rainfall": {
+          "enabled": true,
+          "label": "降水",
+          "color": "#00aeef",
+          "alpha": 1.0,
+          "bar_width": 0.775
+        }
+      },
+      "axes_primary": {
+        "label_text": "气温/°C",
+        "label_fontsize": 18,
+        "label_rotation": 0,
+        "label_align": "left",
+        "label_valign": "bottom",
+        "label_x": -0.051,
+        "label_y": 1.015,
+        "tick_fontsize": 16,
+        "limit": [-30, 30]
+      },
+      "axes_secondary": {
+        "label_text": "降水/mm",
+        "label_fontsize": 18,
+        "label_rotation": 0,
+        "label_align": "right",
+        "label_valign": "bottom",
+        "label_x": 1.055,
+        "label_y": 1.015,
+        "tick_fontsize": 16,
+        "limit": [0, 600]
+      },
+      "axes_x": {
+        "tick_fontsize": 12
+      },
+      "output": {
+        "table_formats": ["xlsx"],
+        "chart_formats": ["png", "svg"],
+        "chart_dpi": 200
+      }
+    }
+  }
+}

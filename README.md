@@ -107,7 +107,8 @@ DrawClimateChart/
 ├── wmo_climate.py            # CLI 主入口
 ├── requirements.txt
 ├── config/
-│   ├── profiles.json         # 多套配置（default + 15 套预设 + 可复用样式）
+│   ├── profiles.json         # 内置配置（default + 14 套预设 + 可复用样式）
+│   ├── custom.json           # 自定义配置（集中存放，如「简图」）
 │   └── README.md             # ★ 配置项完整字典
 ├── src/
 │   ├── http_client.py        # 请求层：主请求头 / 超时 / 退避重试 / BOM 解码 / 缓存
@@ -120,7 +121,7 @@ DrawClimateChart/
 │   └── pipeline.py           # 编排：单城 / 批量 / 对比
 ├── scripts/                  # 可复用工具（夹具抓取 / CLI 验收 / 缺失值扫描）
 ├── tests/
-│   ├── test_regression.py    # 回归测试（离线可跑，122 项断言）
+│   ├── test_regression.py    # 回归测试（离线可跑，124 项断言）
 │   ├── fixtures/             # 真实响应样本（含城市索引与 samples/ 抽样数据）
 │   └── _output/              # 测试产物：渲染核对图 / 表格中间输出（不入库）
 ├── output/                   # 交付物：表格与图（生成物，不入库）
@@ -136,10 +137,14 @@ DrawClimateChart/
 三层来源，后者覆盖前者：
 
 1. **内置默认值**（`src/config_loader.py` 的 `DEFAULTS`，含全部可配置项）
-2. **`config/profiles.json` 中的命名配置**（可 `extends` 继承、可 `apply_styles` 复用样式、可只写要改的项）
+2. **配置文件中的命名配置**：内置 `config/profiles.json` + 自定义 **`config/custom.json`**
+   （两者合并，**同名时自定义优先**；可 `extends` 继承、可 `apply_styles` 复用样式、可只写要改的项）
 3. **命令行 `--set 键=值`** 点路径覆盖
 
 未指定 `--profile` 时使用 `profiles.json` 的 `default_profile`。
+
+> **自定义配置**：全部自定义配置集中写在 `config/custom.json` 的 `profiles` 下（一配置一项），
+> 与内置配置合并共存，无需改动 `profiles.json`。仓库已内置一个示例 `简图`。
 
 ### 6.1 内置预设
 
@@ -167,6 +172,9 @@ python wmo_climate.py --init-profile my_style  # 导出全量模板后再改
 
 ### 6.2 自定义配置示例
 
+> 自定义配置请集中写入 **`config/custom.json`** 的 `profiles` 下（可放任意多个），
+> 无需复制内置文件；同名配置会覆盖内置同名项。
+
 ```jsonc
 {
   "profiles": {
@@ -189,11 +197,13 @@ python wmo_climate.py --init-profile my_style  # 导出全量模板后再改
 
 ## 7. 输出
 
-默认文件名模板 `{city}_{city_id}_climate`，可用 `output.name_template` 调整
+默认文件名模板：**图片**用 `{city}_{city_id}_climate_{profile}`（**以配置名作后缀**，如 `北京_237_climate_简图.png`），
+**表格**用 `{city}_{city_id}_climate`（不带后缀，如 `北京_237_climate.xlsx`）。
+分别由 `output.name_template` / `output.table_name_template` 调整
 （占位符：`{city}` `{city_id}` `{member}` `{station}` `{profile}`；对比图另有 `{city_count}` `{metric}`）。
 
 - **表格**：CSV（UTF-8 BOM，Excel 直接打开不乱码）、Markdown、XLSX、JSON
-- **图**：PNG（默认）/ SVG / PDF
+- **图**：PNG（默认）/ SVG / PDF；SVG 与 PDF 中的文字保持为**可编辑文本对象**，可直接在 Illustrator / Inkscape 中改字（`figure.svg_fonttype` / `figure.pdf_fonttype` 可切换为轮廓路径）
 - 覆盖策略 `output.overwrite`：`overwrite` / `skip` / `timestamp`
 - **运行信息**：日志与结果汇总会列出每个城市**本次实际绘出的要素**（如「绘出要素：日均最高气温、日均最低气温、平均总降水」），已扣除配置禁用、所属轴关闭与无数据自动降级的元素；对比模式另给出「对比要素」。
 
