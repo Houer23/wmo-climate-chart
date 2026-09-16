@@ -27,3 +27,9 @@ desktop.ini
 # ---- 本地配置 ----
 # --init-profile 导出的个人配置模板，不入库
 config/my_style.json
+
+# ---- 工具元数据 ----
+# .workbuddy 为本地工具的项目记忆与配置，含机器相关信息（本地路径、代理等），
+# 不入公开仓库。项目设计规划与使用方式已由 README.md / 开发计划.md /
+# config/README.md / 过程文件/*/说明.md 完整覆盖。
+.workbuddy/
