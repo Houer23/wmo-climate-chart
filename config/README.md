@@ -58,7 +58,7 @@
 | `verify_ssl` | bool | `true` | 是否校验证书（不建议关闭） |
 | `proxy` | str | `""` | 代理地址，如 `http://127.0.0.1:7890` |
 | `save_raw` | bool | `false` | 是否把原始响应落到 `raw_dir` |
-| `raw_dir` | path | `"过程文件/中间产物/raw"` | 原始响应目录 |
+| `raw_dir` | path | `"cache/raw"` | 原始响应目录 |
 | `headers` | obj | 见下 | **主请求头**，逐项可配 |
 | `headers.User-Agent` | str | Chrome 125 UA | 浏览器 UA |
 | `headers.Accept` | str | 见默认 | 声明接受 html/xml/json |
@@ -69,7 +69,7 @@
 | `headers.Upgrade-Insecure-Requests` | str | `"1"` | 与浏览器一致 |
 | `cache.enabled` | bool | `true` | 启用本地响应缓存 |
 | `cache.ttl` | 秒 | `86400` | 缓存有效期 |
-| `cache.dir` | path | `"过程文件/中间产物/cache"` | 缓存目录（含城市索引缓存） |
+| `cache.dir` | path | `"cache"` | 缓存目录（含城市索引缓存） |
 
 > 可往 `headers` 里追加任意自定义头（如 `Referer`、`Cookie`），会与默认头合并。
 

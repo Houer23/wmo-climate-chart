@@ -9,24 +9,22 @@ env/
 .pytest_cache/
 .mypy_cache/
 
-# ---- 运行期缓存与可重建的中间产物 ----
-# 缓存由程序按 fetch.cache.dir 自动生成，无需入库；
-# 但保留目录说明文件，便于克隆后理解目录用途。
-过程文件/中间产物/*
-!过程文件/中间产物/说明.md
-过程文件/**/raw/
+# ---- 运行产物：缓存（程序自动重建，不入库） ----
+# HTTP 响应缓存、城市索引归一化缓存、原始响应（cache/raw）等，
+# 由 fetch.cache.dir / fetch.raw_dir 控制；仅保留顶层说明文件。
+cache/*
+!cache/说明.md
 
-# ---- 交付物：表格与图（可由命令重新生成，不入库） ----
+# ---- 运行产物：交付物（表格与图，可由命令重新生成，不入库） ----
 # output/ 下的 CSV / Markdown / XLSX / JSON / PNG / SVG / PDF 等均为生成物，
-# 执行 python wmo_climate.py 即可重新产出，无需入库；
-# 仅保留 .gitkeep 以维持目录结构。
+# 执行 python wmo_climate.py 即可重新产出；仅保留 .gitkeep 以维持目录结构。
 output/*
 !output/.gitkeep
 
-# ---- 校验渲染图（回归测试自动重建，本地保留不入库） ----
-# 每次运行 python tests/test_regression.py 都会重新生成（约 2.5 MB），
-# 因此不入库；各图核对要点见 过程文件/校验渲染/说明.md。
-过程文件/校验渲染/**/*.png
+# ---- 测试产物（回归测试自动重建，不入库） ----
+# tests/_output/ 下为表格中间输出与渲染核对图，仅保留顶层说明文件。
+tests/_output/*
+!tests/_output/说明.md
 
 # ---- 编辑器 / 系统 ----
 .vscode/

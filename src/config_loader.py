@@ -138,7 +138,7 @@ DEFAULTS: dict[str, Any] = {
         "verify_ssl": True,
         "proxy": "",
         "save_raw": False,
-        "raw_dir": "过程文件/中间产物/raw",
+        "raw_dir": "cache/raw",
         "headers": {
             "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                            "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"),
@@ -154,7 +154,7 @@ DEFAULTS: dict[str, Any] = {
         "cache": {
             "enabled": True,
             "ttl": 86400,
-            "dir": "过程文件/中间产物/cache",
+            "dir": "cache",
         },
     },
 

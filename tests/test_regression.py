@@ -41,7 +41,7 @@ from src.parser import (  # noqa: E402
 )
 
 FIXTURES = ROOT / "tests" / "fixtures"
-VERIFY_DIR = ROOT / "过程文件" / "校验渲染"
+VERIFY_DIR = ROOT / "tests" / "_output" / "render"
 
 RESULTS: list[tuple[str, bool, str]] = []
 
@@ -60,7 +60,7 @@ def run(name: str, func) -> None:
 def fixture(city_id: int) -> str:
     path = FIXTURES / f"{city_id}_zh.json"
     if not path.exists():
-        raise FileNotFoundError(f"缺少夹具 {path}，请先运行 过程文件/脚本/fetch_fixtures.py")
+        raise FileNotFoundError(f"缺少夹具 {path}，请先运行 scripts/fetch_fixtures.py")
     return path.read_text(encoding="utf-8")
 
 
@@ -387,7 +387,7 @@ def test_network() -> None:
     from src.http_client import CityNotFoundError, HttpClient, city_data_url
     cfg = load_config(None)
     client = HttpClient(cfg["fetch"], logger=None,
-                        cache_dir=ROOT / "过程文件" / "中间产物" / "cache")
+                        cache_dir=ROOT / "cache")
     url = city_data_url(cfg["fetch"], 237, "zh")
     result = client.get(url, use_cache=False)
     check("联网取北京数据成功", result.status == 200 and len(result.content) > 1000,
@@ -405,7 +405,7 @@ def test_network() -> None:
 def main() -> int:
     import shutil
 
-    tmp = ROOT / "过程文件" / "中间产物" / "test_out"
+    tmp = ROOT / "tests" / "_output" / "tables"
     if tmp.exists():
         shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True, exist_ok=True)
@@ -445,7 +445,7 @@ def main() -> int:
             print(f"  ✗ {name}")
             if detail:
                 print(f"      {detail.splitlines()[0] if detail else ''}")
-    print(f"\n校验渲染图目录：{VERIFY_DIR}")
+    print(f"\n渲染核对图目录：{VERIFY_DIR}")
     print(f"表格测试产物目录：{tmp}")
     return 1 if failed else 0
 

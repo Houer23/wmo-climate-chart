@@ -44,7 +44,7 @@ def main() -> int:
 
     cfg = load_config(None)
     client = HttpClient(cfg["fetch"], logger=None,
-                        cache_dir=root / "过程文件" / "中间产物" / "cache")
+                        cache_dir=root / "cache")
     client.save_raw = False
 
     failed = []

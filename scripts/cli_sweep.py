@@ -1,4 +1,4 @@
-"""CLI 全子命令验收：把每个开关都真实跑一遍，报告写入 过程文件/日志/_cli_sweep.txt。
+"""CLI 全子命令验收：把每个开关都真实跑一遍，报告写入 logs/_cli_sweep.txt。
 
 用途（可复用）：python scripts/cli_sweep.py
 注意：包含联网请求（首个城市会用缓存），用于端到端验收。
@@ -79,7 +79,7 @@ def main() -> int:
     out.append("=" * 78)
     out.append(f"用例总数 {len(CASES)}，异常用例 {failures} 个")
 
-    report = ROOT / "过程文件" / "日志" / "_cli_sweep.txt"
+    report = ROOT / "logs" / "_cli_sweep.txt"
     report.write_text("\n".join(out), encoding="utf-8")
     print(f"报告已写入：{report}")
     return 1 if failures else 0

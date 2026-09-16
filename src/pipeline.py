@@ -92,8 +92,8 @@ def _resolve_dir(cfg: dict[str, Any], value: str, out_root: Optional[Path] = Non
 def paths_for(cfg: dict[str, Any], out_dir: Optional[Path] = None) -> dict[str, Path]:
     return {
         "out_dir": out_dir.resolve() if out_dir else _resolve_dir(cfg, cfg["output"]["out_dir"]),
-        "cache_dir": _resolve_dir(cfg, (cfg["fetch"].get("cache") or {}).get("dir", "过程文件/中间产物/cache")),
-        "raw_dir": _resolve_dir(cfg, cfg["fetch"].get("raw_dir", "过程文件/中间产物/raw")),
+        "cache_dir": _resolve_dir(cfg, (cfg["fetch"].get("cache") or {}).get("dir", "cache")),
+        "raw_dir": _resolve_dir(cfg, cfg["fetch"].get("raw_dir", "cache/raw")),
     }
 
 
