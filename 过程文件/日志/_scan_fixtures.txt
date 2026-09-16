@@ -1,0 +1,6 @@
+﻿1007_zh.json   鏂拌タ浼埄浜?   raintype='PPT'      unit='mm'   rainfall缂哄け=0 raindays缂哄け=0 min缂哄け=0 max缂哄け=0 闄嶆按0鍊?0 鏃舵=-
+156_zh.json    婢抽棬       raintype='Rainfall' unit='mm'   rainfall缂哄け=0 raindays缂哄け=0 min缂哄け=0 max缂哄け=0 闄嶆按0鍊?0 鏃舵=1971-2000
+1_zh.json      棣欐腐       raintype='Rainfall' unit='mm'   rainfall缂哄け=0 raindays缂哄け=0 min缂哄け=0 max缂哄け=0 闄嶆按0鍊?0 鏃舵=1991-2020
+2184_zh.json   甯屾椽       raintype=''         unit=''     rainfall缂哄け=0 raindays缂哄け=0 min缂哄け=0 max缂哄け=0 闄嶆按0鍊?0 鏃舵=1981-2010
+237_zh.json    鍖椾含       raintype='PPT'      unit='mm'   rainfall缂哄け=0 raindays缂哄け=0 min缂哄け=0 max缂哄け=0 闄嶆按0鍊?0 鏃舵=1961-1990
+2685_zh.json 濂ヤ鸡 鏃犳皵鍊欐暟鎹?

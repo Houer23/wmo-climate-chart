@@ -1,0 +1,4 @@
+﻿OK  https://worldweather.wmo.int/zh/json/Country_zh.xml  LEN=1124415
+ERR https://worldweather.wmo.int/zh/json/citylist_zh.xml  远程服务器返回错误: (404) 未找到。
+ERR https://worldweather.wmo.int/zh/json/city_zh.xml  远程服务器返回错误: (404) 未找到。
+ERR https://worldweather.wmo.int/zh/json/member_zh.xml  远程服务器返回错误: (404) 未找到。

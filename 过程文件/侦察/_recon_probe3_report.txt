@@ -1,0 +1,9 @@
+cityId=123456 try1 URLError: <urlopen error [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1032)>
+cityId=123456 try2 URLError: <urlopen error [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1032)>
+cityId=237 try1 HTTP200 len=3879 name=北京 mem=中国 raintype='PPT' unit='mm' months=12 datab=1961 datae=1990
+   m1={"month": 1, "maxTemp": "1.6", "minTemp": "-9.4", "meanTemp": null, "maxTempF": "34.9", "minTempF": "15.1", "meanTempF": null, "raindays": "2", "rainfall": "3", "climateFromMemDate": "2002-03-08"}
+cityId=1 try1 URLError: <urlopen error [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1032)>
+cityId=1 try2 HTTP200 len=4401 name=香港 mem=中国香港 raintype='Rainfall' unit='mm' months=12 datab=1991 datae=2020
+   m1={"month": 1, "maxTemp": "18.7", "minTemp": "14.6", "meanTemp": null, "maxTempF": "65.7", "minTempF": "58.3", "meanTempF": null, "raindays": "5.7", "rainfall": "33.2", "climateFromMemDate": "2001-03-12"}
+cityId=156 try1 HTTP200 len=4040 name=澳门 mem=中国澳门 raintype='Rainfall' unit='mm' months=12 datab=1971 datae=2000
+   m1={"month": 1, "maxTemp": "17.7", "minTemp": "12.2", "meanTemp": null, "maxTempF": "63.9", "minTempF": "54.0", "meanTempF": null, "raindays": "6", "rainfall": "32.4", "climateFromMemDate": "2001-08-22"}

@@ -1,0 +1,7 @@
+﻿== python ==
+pip 26.1.2 from C:\Users\user\.workbuddy\binaries\python\versions\3.13.12\Lib\site-packages\pip (python 3.13)
+
+== pip config ==
+== index reachability ==
+pypi.org: HTTP 200 len=1537881
+tuna: HTTP 200 len=887152

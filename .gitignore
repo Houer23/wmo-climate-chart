@@ -1,0 +1,29 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# ---- 运行期缓存与可重建的中间产物 ----
+# 缓存由程序按 fetch.cache.dir 自动生成，无需入库；
+# 但保留目录说明文件，便于克隆后理解目录用途。
+过程文件/中间产物/*
+!过程文件/中间产物/说明.md
+过程文件/**/raw/
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+~$*
+
+# ---- 本地配置 ----
+# --init-profile 导出的个人配置模板，不入库
+config/my_style.json

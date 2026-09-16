@@ -1,0 +1,7 @@
+﻿matplotlib: False
+pandas: False
+requests: False
+openpyxl: True
+numpy: False
+yaml: False
+PIL: True

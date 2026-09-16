@@ -1,0 +1,10 @@
+﻿鏈夌己澶卞€肩殑鍩庡競锛?
+1729.json    鍗㈡．鏍兼灄       raintype='Rainfall' rainfall缂哄け=0 raindays缂哄け=0 min缂哄け=12 max缂哄け=12
+1823.json    鍦ｇ帥涓?       raintype='Rainfall' rainfall缂哄け=0 raindays缂哄け=0 min缂哄け=12 max缂哄け=12
+2034.json    鍦ｄ繚缃楋紝鏄庡凹鑻忚揪宸? raintype='Rainfall' rainfall缂哄け=0 raindays缂哄け=12 min缂哄け=0 max缂哄け=0
+2222.json    甯冩媺骞茶惃       raintype=''         rainfall缂哄け=0 raindays缂哄け=12 min缂哄け=0 max缂哄け=0
+286.json     搴撴媺绱㈠矝       raintype='PPT'      rainfall缂哄け=0 raindays缂哄け=0 min缂哄け=12 max缂哄け=12
+2888.json    璐濆凹澶氬皵濮?     raintype=''         rainfall缂哄け=0 raindays缂哄け=12 min缂哄け=0 max缂哄け=0
+500.json     濉旈噷         raintype='Rainfall' rainfall缂哄け=12 raindays缂哄け=12 min缂哄け=0 max缂哄け=0
+
+鍏ㄩ儴鎶芥牱鍩庡競鏁帮細 30

@@ -1,0 +1,7 @@
+﻿matplotlib: True
+pandas: True
+requests: True
+openpyxl: True
+numpy: True
+yaml: True
+PIL: True

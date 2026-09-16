@@ -1,0 +1,1 @@
+﻿fonts: Deng.ttf, Dengb.ttf, Dengl.ttf, msyh.ttc, msyhbd.ttc, msyhl.ttc, simhei.ttf, simsun.ttc, simsunb.ttf

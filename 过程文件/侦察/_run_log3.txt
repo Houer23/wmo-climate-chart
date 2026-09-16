@@ -1,0 +1,18 @@
+﻿python.exe : Traceback (most recent call last):
+所在位置 行:447 字符: 1
++ & $py "$dir\过程文件\侦察\recon_probe.py" "$dir\过程文件\侦察\_recon_country.json ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last) 
+   ::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "C:\Users\user\WorkBuddy\2026-09-16-16-36-56\杩囩▼鏂囦欢\渚﹀療\recon_probe.py",
+ line 125, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\user\WorkBuddy\2026-09-16-16-36-56\杩囩▼鏂囦欢\渚﹀療\recon_probe.py",
+ line 48, in main
+    for c in (m.get("city") or []):
+              ^^^^^
+AttributeError: 'str' object has no attribute 'get'
+exit=1

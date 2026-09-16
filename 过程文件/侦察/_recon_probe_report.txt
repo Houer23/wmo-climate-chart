@@ -1,0 +1,41 @@
+member 数量: 210
+member keys: ['city', 'countryLatitude', 'countryLongitude', 'logo', 'memId', 'memName', 'orgName', 'ra', 'shortMemName', 'szmlv', 'url', 'zoomlv']
+city 条目字段: ['cityId', 'cityLatitude', 'cityLongitude', 'cityName', 'climate', 'enName', 'forecast', 'isCapital', 'isDep', 'stationName', 'timeZone', 'tourismBoardName', 'tourismURL']
+全球城市总数: 3629
+城市样例: [('阿尔及利亚', 242, '阿尔及尔'), ('阿尔及利亚', 1434, '安纳巴'), ('阿尔及利亚', 1361, '奥兰'), ('阿尔及利亚', 1435, '贝沙尔'), ('阿尔及利亚', 1436, '比斯卡拉')]
+  [1007] 新西伯利亚 raintype=PPT rainunit=mm months=12 clino= datab= datae= tempb= tempe=
+  [631] 安大略省桑德贝 raintype=PPT rainunit=mm months=12 clino= datab=1971 datae=2000 tempb= tempe=
+  [2184] 希洪 raintype= rainunit= months=12 clino= datab=1981 datae=2010 tempb= tempe=
+  [406] 贡迪温迪 raintype=Rainfall rainunit=mm months=12 clino= datab=1991 datae=2010 tempb= tempe=
+  [2150] 密支那 raintype=Rainfall rainunit=mm months=12 clino= datab=1981 datae=2010 tempb= tempe=
+  [500] 塔里 raintype=Rainfall rainunit=mm months=12 clino= datab=1997 datae=2010 tempb= tempe=
+  [140] 班珠尔 raintype=Rainfall rainunit=mm months=12 clino= datab=1991 datae=2020 tempb= tempe=
+  [202] 拉纳卡空港 raintype=Rainfall rainunit=mm months=12 clino= datab=2002 datae=2011 tempb= tempe=
+  [432] 凯恩卡塔 raintype=Rainfall rainunit=mm months=12 clino= datab=1930 datae=2002 tempb= tempe=
+  [2034] 圣保罗，明尼苏达州 raintype=Rainfall rainunit=mm months=12 clino= datab=1981 datae=2010 tempb= tempe=
+  [1824] 佩德尔湖 raintype=Rainfall rainunit=mm months=12 clino= datab=1981 datae=2010 tempb= tempe=
+  [286] 库拉索岛 raintype=PPT rainunit=mm months=12 clino=2001-12-31 datab=1961 datae=1990 tempb= tempe=
+  [951] 奎奎  raintype=Rainfall rainunit=mm months=12 clino= datab=1961 datae=1990 tempb= tempe=
+  [1729] 卢森格林 raintype=Rainfall rainunit=mm months=12 clino= datab= datae= tempb= tempe=
+  [1823] 圣玛丽 raintype=Rainfall rainunit=mm months=12 clino= datab= datae= tempb= tempe=
+  [1301] 托雷翁 raintype=Rainfall rainunit=mm months=12 clino= datab=1971 datae=2000 tempb= tempe=
+  [311] 莫罗尼 raintype=Rainfall rainunit=mm months=12 clino= datab= datae= tempb= tempe=
+  [2222] 布拉干萨 raintype= rainunit= months=12 clino= datab=1971 datae=2000 tempb= tempe=
+  [1082] 圣路易斯 raintype=Rainfall rainunit=mm months=12 clino= datab=1961 datae=1990 tempb= tempe=
+  [2888] 贝尼多尔姆 raintype= rainunit= months=12 clino= datab= datae= tempb= tempe=
+  [2182] 埃尔切 raintype= rainunit= months=12 clino= datab=1981 datae=2010 tempb= tempe=
+
+抽样结果: ok=21 无气候数据=9 raintype分布={'PPT': 3, '': 4, 'Rainfall': 14}
+meanTemp 有值/为空: 0/252
+rainfall 空值: 12  raindays 空值: 48 raindays=='NULL'字符串: 0
+月份数分布: {12: 21}
+异常/注记:
+  2685 奥伦 无气候数据
+  1691 马拉库塔 无气候数据
+  3368 塞鲁延县 无气候数据
+  2617 林特 无气候数据
+  1700 波波山 无气候数据
+  2760 圣阿曼兹 无气候数据
+  1659 坎贝尔镇 无气候数据
+  3401 塔巴隆县 无气候数据
+  2642 梅尔豪特 无气候数据

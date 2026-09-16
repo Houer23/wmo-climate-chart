@@ -1,0 +1,2506 @@
+<!DOCTYPE html>
+<html lang="zh" dir="ltr"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:dc="http://purl.org/dc/terms/"
+	xmlns:foaf="http://xmlns.com/foaf/0.1/"
+	xmlns:og="http://ogp.me/ns#"
+	xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+	xmlns:sioc="http://rdfs.org/sioc/ns#"
+	xmlns:sioct="http://rdfs.org/sioc/types#"
+	xmlns:skos="http://www.w3.org/2004/02/skos/core#"
+	xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+	xmlns:owl="http://www.w3.org/2002/07/owl#"
+	xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+	xmlns:rss="http://purl.org/rss/1.0/"
+	xmlns:site="http://public.wmo.int/en/ns#"
+	xmlns:fb="http://ogp.me/ns/fb#"
+	xmlns:article="http://ogp.me/ns/article#"
+	xmlns:book="http://ogp.me/ns/book#"
+	xmlns:profile="http://ogp.me/ns/profile#"
+	xmlns:video="http://ogp.me/ns/video#"
+	xmlns:product="http://ogp.me/ns/product#">
+   <head profile="http://www.w3.org/1999/xhtml/vocab">
+
+        <title>世界天气信息服务网</title>
+		<!--[if IE 9]>
+	<meta http-equiv="x-ua-compatible" content="IE=EmulateIE9" >
+<![endif]-->
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+        <meta http-equiv="X-UA-Compatible" content="IE=Edge, IE=11, IE=10"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+		<meta name="identifier-url" content="http://www.worldweather.cn" />
+		<meta name="title" content="World Weather Information Service | WMO" />
+		<meta name="description" content="This global web site presents OFFICIAL weather forecasts and climatological information for selected cities supplied by National Meteorological &amp; Hydrological Services worldwide." />
+		<meta name="abstract" content="All" />
+		<meta name="keywords" content="WMO, WWIS, World Weather Information Service, global official forecasts, world weather forecasts, climatological information, present weather, sunrise, sunset" />
+		<meta name="author" content="WMO" />
+		<meta name="language" content="EN" />
+		<meta name="copyright" content="© 2018 WMO" />
+		<meta name="robots" content="All" />
+		<meta name="no-email-collection" content="http://www.unspam.com/noemailcollection/" />
+		<meta name="reply-to" content="webmaster@wmo.int" />
+
+		<meta property="og:site_name" content="World Weather Information Service" />
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content="World Weather Information Service" />
+		<meta property="og:description" content="This global web site presents OFFICIAL weather forecasts and climatological information for selected cities supplied by National Meteorological &amp; Hydrological Services worldwide" />
+		<meta property="og:image" content="http://worldweather.wmo.int/images/wmo-share-logo.png" />
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:title" content="World Weather Information Service" />
+		<meta name='topic' content='scientific'/>
+		<meta name='coverage' content='Worldwide' />
+		<meta name='distribution' content='Global' />
+		<meta name='rating' content='General' />
+		<meta name='revisit-after' content='1 day' />
+		<meta name='HandheldFriendly' content='True' />
+		<meta http-equiv='imagetoolbar' content='no' />
+		<meta http-equiv='x-dns-prefetch-control' content='off' />
+		
+		<link rel='help' title='FAQ' href='/zh/note.html'/>
+		<link rel="SHORTCUT ICON" type="image/x-icon" href="../images/wmo.ico"/>
+        <link rel="stylesheet" type="text/css" href="../styles/jquery-ui.min.css" />
+        <link rel="stylesheet" type="text/css" href="../styles/rwd.css" charset="utf-8"/>
+		
+		<style type="text/css">
+		#viewDiv {
+			padding: 0;
+			margin: 0;
+			/*height: 100%;
+			width: 100%;*/
+			width: 509px;
+			height: 362px;
+			cursor:pointer;
+			border: 1px solid #000000;
+		}
+		.esri-view-width-xlarge .esri-popup__main-container, .esri-popup__main-container { display:none !important; }
+		.msgbox {
+			border: 1px solid #767676;
+			border-radius: 2px;
+			padding: 2px 4px;
+			color: #575757;
+			font-size: 12px;
+			
+			background: #ffffff;
+			background: -moz-linear-gradient(top,  #ffffff 0%, #f5f6fa 50%, #edeef5 52%, #e4e5f0 100%);
+			background: -webkit-linear-gradient(top,  #ffffff 0%,#f5f6fa 50%,#edeef5 52%,#e4e5f0 100%);
+			background: linear-gradient(to bottom,  #ffffff 0%,#f5f6fa 50%,#edeef5 52%,#e4e5f0 100%);
+			filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#ffffff', endColorstr='#e4e5f0',GradientType=0 );
+			
+			-webkit-box-shadow: 4px 4px 3px -2px rgba(91, 91, 91,0.88);
+			-moz-box-shadow: 4px 4px 3px -2px rgba(91, 91, 91,0.88);
+			box-shadow: 4px 4px 3px -2px rgba(91, 91, 91,0.88);
+		}
+
+		#viewDiv {display: none;}
+		@media only screen and (min-width: 1024px) {
+			#viewDiv {display: flex;}
+		}
+		#remarks {
+			font-size: 75%;
+			padding-left:15px;
+			padding-top:10px;
+		}
+		.city_ecmwf_forecast_day_object {
+			display: block;
+			float: left;
+			width: 100%;
+			background-color: #e8f2fd;
+			color: #2a425c;
+			padding: 5px 0px;
+			margin-bottom: 3px;
+			font-weight: bold;
+		}
+		.city_fc_desc {
+			width: 41%;
+		}
+		.div_ecmwf_logo {
+			float: left;
+			width: 7%;
+			text-align: left;
+		}
+		.ecmwf_logo {
+			width: 100%;
+			background-size: contain;
+			height: 7px;
+			display: block;
+			margin: 19px auto 0 auto;
+		}
+		.model_run_remark {
+			color: #fff;
+			padding: 2px 0px 6px 0px;
+			font-size: 80%;
+		}
+		</style>
+		<link rel="stylesheet" href="../scripts/arcgis/4.11/esri/themes/dark/main.css" />
+		<script type="text/javascript" src="../scripts/moment-with-locales.min.js"></script>
+		<script type="text/javascript" src="../scripts/turf.min.js"></script>
+
+        <script type="text/javascript" src="../scripts/jquery.min.js"></script>
+        <script type="text/javascript" src="../scripts/jquery-ui.min.js"></script>
+        <script type="text/javascript" src="../scripts/highcharts.js"></script>
+		<script src="../scripts/arcgis/4.11/init.js"></script>
+		
+		        <script type="text/javascript" src="../scripts/common.js"></script>
+		<script type="text/javascript" src="../scripts/wmo_arcgis_city.js"></script>
+        <script type="text/javascript">
+			//cityId
+			var param_val = GetURLParameter('cityId');
+			//Updated on 28 Aug 2017
+			var areaObj = {"home":"首页","region":"地区:","regions":"区域","myfav":"个人化","wtnew":"最新消息","abtus": "关于我们"};
+            selector_list += ', .city_name, .m_city_name, .city_country, .city_local_time, .city_currwx_issuetmie, .city_forecast_issuetime, .city_currwx_issuetime, .city_fc_date, .sunrise_datetime,.city_fc_temp,.max_temp_icon,.min_temp_box,.city_fc_desc, .moonrise_datetime, .sunset_datetime, .moonset_datetime, .city_map_instruction, #remark, #breadcrumb li, #breadcrumb li a';
+            var member_json_data = null, t = null;
+            var set_max_item = 4, fav_item_w = 162, sb_margin_left = 2, ts_padding_left = 0, btn_lock = false;
+            var qsDataSource = [], default_search_text = "请输入城市/国家/地区名称", searchKey = "", searchValue = "", search_data = null;
+            var pageLang = localLang = "zh";
+			
+			if (pageLang == 'zh') localLang = 'zh-cn';
+			if (pageLang == 'tc') localLang = 'zh-tw';
+			if (pageLang == 'kr') localLang = 'ko';
+			
+            var cityObj1 = [];
+            var gray_base_map = "Gray base map";
+            var capCityObj = null;
+            var forecastCityObj = null;
+            var cityObj = null;
+            var MyLat = 0;
+            var MyLng = 0;
+            var base_layer = "The base layer";
+            var additional_layer = "Additional layers";
+            var wmotitle = '';
+            var present_json_data = null;
+            var list_data = null;
+            var region_json_data = null;
+            var forecastObjArr = new Array();
+            var wmo_on_fb = "世界气象组织在Facebook";
+
+            var memberObj = null;
+            var json_data;
+            var ra_val;
+            var regionArray = new Array();
+            var t1 = null;
+            var temp_f = "";
+			
+			
+			var langDescJson = {"wxdesc": { "0101" : "沙尘暴", "0102" : "沙尘暴", "0103" : "扬沙", "0104" : "浮尘", "0201" : "雷暴", "0202" : "雷阵雨", "0203" : "风暴", "0204" : "闪电", "0301" : "冰雹", "0401" : "吹雪", "0402" : "大风雪", "0403" : "堆雪", "0404" : "暴风雪", "0501" : "阵雪", "0502" : "小雪", "0601" : "雪", "0602" : "大雪", "0603" : "降雪", "0701" : "小雪", "0801" : "雨夹雪", "0901" : "阵雨", "0902" : "强阵雨", "0903" : "阵雨", "1001" : "零星阵雨", "1002" : "零星阵雨", "1101" : "局地阵雨", "1201" : "阵雨", "1301" : "冻雨", "1401" : "雨", "1501" : "毛毛雨", "1502" : "小雨", "1601" : "雾", "1701" : "轻雾", "1801" : "烟雾", "1901" : "霾", "2001" : "阴", "2101" : "多云间晴", "2102" : "多云间晴", "2103" : "多云间晴", "2201" : "晴间多云", "2202" : "晴间多云", "2203" : "晴到多云", "2204" : "晴间多云", "2301" : "多云", "2302" : "多云", "2401" : "晴", "2402" : "晴", "2403" : "晴", "2501" : "晴", "2502" : "晴", "2601" : "风", "2602" : "狂风", "2603" : "暴风", "2604" : "大风", "2701" : "潮湿", "2702" : "潮湿", "2801" : "干燥", "2901" : "冰冻", "3001" : "霜冻", "3101" : "炎热", "3201" : "寒冷", "3202" : "寒冷", "3301" : "暖和", "3401" : "清凉", "3501" : "火山灰"}};
+			
+			function close_beta(type){
+				if(type==2){
+					$('.beta_box').css('display','none');
+				}else{
+					$('.beta_box_sun').css('display','none');
+				}
+				
+				
+			}
+			
+			function beta_box(type){
+				var close_btn = '<div class="close_beta" onclick="close_beta('+type+')">✖</div>';
+				
+				var msg_sun = "本网站提供的日出及日落时间是测试版本。<p>日出和日落时间是使用标准算法计算的，一般误差在几分钟内。时间的精确度也受到观测的实际高度和位置影响。</p><p>由于日出和日落时间使用本地时间计算，当时间变为夏令时间时，可能会导致计算时间不正确</p>";
+				var msg_weather = "<p>本网站提供的实况天气信息是测试版本。</p><p>本网站所展示的城市天气来自附近气象站测量的天气报告。 在使用当前的天气信息时，用户应该注意由于各种因素，可能不同于实际的天气条件，这些因素包括但不限于用户位置的地形与高度和气象站的差异，用户的时间和天气报告观测时间的差异。用户可参考国家气象和水文服务网站的最新天气报告。</p>";
+				
+				
+					
+					if(type == 1){
+						$('.beta_box').css('display','none');
+						$('.beta_box_sun').css('display','block');
+						$('.beta_box_sun').html(close_btn+msg_sun);
+						
+					}
+					
+					if(type == 2){
+						$('.beta_box').css('display','block');
+						$('.beta_box_sun').css('display','none');
+						$('.beta_box').html(close_btn+msg_weather);
+						
+					}
+
+			}
+			
+			
+			function beta_msg(){
+			
+				$('.beta_msg').css('display','block');
+				if(pageLang=='ar'){
+					$('.beta_msg').html('بيتا');
+					
+				}
+				
+				if(pageLang=='en'){
+					$('.beta_msg').html('N.B.');
+				}
+				
+				if(pageLang=='tc'){
+					$('.beta_msg').html('測試');
+				}
+				
+				if(pageLang=='zh'){
+					$('.beta_msg').html('测试');
+				}
+				
+				if(pageLang=='fr'){
+					$('.beta_msg').html('Bêta / en test');
+				}
+				
+				if(pageLang=='de'){
+					$('.beta_msg').html('Beta-Version');
+				}
+				
+				if(pageLang=='it'){
+					$('.beta_msg').html('Beta');
+				}
+				
+				if(pageLang=='kr'){
+					$('.beta_msg').html('베타');
+				}
+				
+				if(pageLang=='pl'){
+					$('.beta_msg').html('wersja testowa');
+				}
+				
+				if(pageLang=='pt'){
+					$('.beta_msg').html('Beta');
+				}
+				
+				if(pageLang=='ru'){
+					$('.beta_msg').html('Примечание');
+				}
+				
+				if(pageLang=='es'){
+					$('.beta_msg').html('Beta');
+				}
+			}
+
+            function updateFavBar() {
+                var w_w = $(window).width();
+                var w_srlbar = ($(document).height() > $(window).height()) ? 17 : 0;
+                //w_w -= w_srlbar;
+                fav_item_w = 162;
+                sb_margin_left = 0;
+                ts_padding_left = 0;
+                if (w_w < 343) {
+                    set_max_item = 1;
+                    fav_item_w = 107;
+                } else if (w_w < 380) {
+                    set_max_item = 2;
+                    fav_item_w = 107;
+                } else if (w_w < 420) {
+                    set_max_item = 2;
+                    fav_item_w = 135;
+                } else if (w_w < 460) {
+                    set_max_item = 2;
+                    fav_item_w = 145;
+                } else if (w_w < 480) {
+                    set_max_item = 2;
+                    fav_item_w = 162;
+                } else if (w_w < 580) {
+                    set_max_item = 3;
+                    fav_item_w = 125;
+                } else if (w_w < 600) {
+                    set_max_item = 1;
+                    sb_margin_left = 72 - (630 - w_w);
+                    fav_item_w = 158;
+                } else if (w_w < 630) {
+                    set_max_item = 1;
+                    sb_margin_left = 72 - (630 - w_w);
+                } else if (w_w < 695) {
+                    set_max_item = 2;
+                    fav_item_w = 115;
+                    sb_margin_left = 68 - (695 - w_w);
+                } else if (w_w < 725) {
+                    set_max_item = 2;
+                    fav_item_w = 148;
+                    sb_margin_left = 32 - (725 - w_w);
+                } else if (w_w < 885) {
+                    set_max_item = 2;
+                    sb_margin_left = 163 - (885 - w_w);
+                } else if (w_w < 1024) {//1024
+                    set_max_item = 3;
+                    sb_margin_left = 149 - (1024 - w_w);
+                    
+                    //sb_margin_left = 134 - (1024 - w_w);
+                } else {
+                    set_max_item = 4;
+                    sb_margin_left = 2;
+                }
+				/*               
+			   if (w_w < 600) {
+                    ts_padding_left = (w_w / 2) - ($('#top_searchcontainer').outerWidth() / 2);
+                }*/
+                $('#fav_item_container li').css({'width': fav_item_w + 'px'});
+                $('#fav_item_container li a').css({'width': fav_item_w + 'px'});
+                //$('.fav_item_mask').css({'width': (set_max_item * fav_item_w)+'px'});
+                $('#search_box').css({'margin-left': sb_margin_left + 'px'});
+                $('#top_searchcontainer').css({'margin-left': ts_padding_left + 'px'});
+				var currentMyFavoritesList = getCookie('myFavorite_e') || '';
+                var myFavoritesList = currentMyFavoritesList.split('|');
+				
+				if (window.innerWidth < 1024) {
+					$('.fav_item_mask').css({'max-width': '200px'});
+				}else{
+					if (set_max_item > myFavoritesList.length) {
+						$('.fav_item_mask').css({'width': (myFavoritesList.length * fav_item_w) + 'px'});
+					} else {
+						$('.fav_item_mask').css({'width': (set_max_item * fav_item_w) + 'px'});
+					}
+				
+				}
+
+                if (myFavoritesList.length > set_max_item){
+					if (pageLang == 'ar'){ 
+					$('#next_item_btn>span').css({'background-position': '-5px 0px'});
+					$('#prev_item_btn>span').css({'background-position': '-10px 0px'});
+					}else{
+                    $('#next_item_btn>span').css({'background-position': '-15px 0px'});
+                    }
+				}
+                   
+                $('.fav_city_fc_block_mask').css({'width': ($('.fav_city_fc_block').width()) + 'px'});
+            }
+
+            function goPrevItem() {
+                if (btn_lock)
+                    return;
+                btn_lock = true;
+				var currentMyFavoritesList = getCookie('myFavorite_e') || '';
+                var myFavoritesList = currentMyFavoritesList.split('|');
+                //var myFavoritesList = currentMyFavoritesList_sample.split('|');
+				
+				var move_width;
+				if(myFavoritesList.length / 4 > 0){
+					move_width = 4*fav_item_w;
+				}
+				
+                if (myFavoritesList.length > set_max_item) {
+					
+					
+						if (pageLang == 'ar'){
+						var curr_margin_right = parseInt($('#fav_item_container').css('margin-right'));
+						
+						 if (curr_margin_right < 0) {
+                        $("#fav_item_container").animate({
+							'margin-right': "+=" + move_width
+                        }, 240, function () {
+                            if (parseInt($('#fav_item_container').css('margin-right')) == 0) {
+                                $('#prev_item_btn>span').css({'background-position': '-15px 0px'});
+                            }
+                            btn_lock = false;
+                        });
+							
+                        $('#next_item_btn>span').css({'background-position': '-5px 0px'});
+						
+						} else {
+						 $('#prev_item_btn>span').css({'background-position': '-10px 0px'});
+							btn_lock = false;
+						}
+
+					}else{
+					
+					
+                    var curr_margin_left = parseInt($('#fav_item_container').css('margin-left'));
+                    if (curr_margin_left < 0) {
+                        $("#fav_item_container").animate({
+                            'margin-left': "+=" + move_width
+                        }, 240, function () {
+                            if (parseInt($('#fav_item_container').css('margin-left')) == 0) {
+                                $('#prev_item_btn>span').css({'background-position': '0px 0px'});
+                            }
+                            btn_lock = false;
+                        });
+                        $('#next_item_btn>span').css({'background-position': '-15px 0px'});
+                    } else {
+                        btn_lock = false;
+                    }
+					
+					}
+                } else {
+                    btn_lock = false;
+                }
+            }
+			
+            function goNextItem() {
+                if (btn_lock)
+                    return;
+                btn_lock = true;
+				var currentMyFavoritesList = getCookie('myFavorite_e') || '';
+                var myFavoritesList = currentMyFavoritesList.split('|');
+                //var myFavoritesList = currentMyFavoritesList_sample.split('|');
+				
+				var move_width;
+				if(myFavoritesList.length / 4 > 0){
+					move_width = 4*fav_item_w;
+				}
+				
+				
+                if (myFavoritesList.length > set_max_item) {
+					
+						if (pageLang == 'ar'){
+						
+						var curr_margin_right = parseInt($('#fav_item_container').css('margin-right'));
+							if (curr_margin_right > (myFavoritesList.length - set_max_item) * fav_item_w * -1) {
+								$("#fav_item_container").animate({
+									'margin-right': "-=" + move_width
+								}, 240, function () {
+									if (parseInt($('#fav_item_container').css('margin-right')) == (myFavoritesList.length - set_max_item) * fav_item_w * -1) {
+										$('#next_item_btn>span').css({'background-position': '-5px 0px'});
+									}
+									btn_lock = false;
+								});
+								$('#prev_item_btn>span').css({'background-position': '-15px 0px'});
+							} else {
+								$('#next_item_btn>span').css({'background-position': '0px 0px'});
+								btn_lock = false;
+							}
+					}else{
+					
+					
+                    var curr_margin_left = parseInt($('#fav_item_container').css('margin-left'));
+                    if (curr_margin_left > (myFavoritesList.length - set_max_item) * fav_item_w * -1) {
+                        $("#fav_item_container").animate({
+                            'margin-left': "-=" + move_width
+                        }, 240, function () {
+                            if (parseInt($('#fav_item_container').css('margin-left')) == (myFavoritesList.length - set_max_item) * fav_item_w * -1) {
+                                $('#next_item_btn>span').css({'background-position': '-10px 0px'});
+                            }
+                            btn_lock = false;
+                        });
+                        $('#prev_item_btn>span').css({'background-position': '-5px 0px'});
+                    } else {
+                        btn_lock = false;
+                    }
+					
+					}
+                } else {
+                    btn_lock = false;
+                }
+            }
+            function setSelectedCSS(li_id) {
+                $('#fav_item_container a').removeClass('sel');
+                $('#fav_item_container li#' + li_id + ' a').addClass('sel');
+            }
+			
+			function update_m_my_fav(){
+				var select_val = $('#m_my_fav_menu option:selected').val();
+				window.location.replace("./city.html?cityId=" + select_val);
+			}
+			
+			
+            /*Load MyFavorite city from cookie, get the home city info*/
+            /*and create each MyFavorite item in Slider*/
+            function loadMyFavorites(loadHomeCity) {
+				var currentMyFavoritesList = getCookie('myFavorite_e') || '';
+                var myFavoritesList = currentMyFavoritesList.split('|');
+                //var myFavoritesList = currentMyFavoritesList_sample.split('|');
+
+                var favoriteObj;
+				
+				
+				if (window.innerWidth < 1024) {
+					$('#fav_item_container').css('display','none');
+					$('#next_item_btn').css('display','none');
+					$('#prev_item_btn').css('display','none');
+					
+					var select = $('<select id="m_my_fav_menu" class="m_my_fav_menu" onchange="update_m_my_fav()" ></select>');
+					var option;
+					
+					for (var i = 0; i < myFavoritesList.length; i++) {
+					
+						
+						var favoriteType = myFavoritesList[i].substr(0, myFavoritesList[i].indexOf('#'));
+						var cityId = myFavoritesList[i].substr(myFavoritesList[i].indexOf('#') + 1);
+						
+						if(parseInt(cityId)>600000) {
+							var sel = (i == 0) ? 'sel' : '';
+							option = $('<option id="ecmwffav'+cityId+'" value="' + cityId + '"></option>');
+							if(param_val==cityId) option.attr('selected', 'selected');
+							select.append(option);							
+							continue;
+						}
+						
+						if (favoriteType == "c") {
+							 if (i == 0 && loadHomeCity) {
+                       //     ajax_get_city_info(cityId, !loadHomeCity);
+                        }
+                        favoriteObj = getObjects(member_json_data, 'cityId', cityId);
+
+							
+							var fav_city_length = 0; //20170418
+							if(pageLang=='zh'||pageLang=='tc'){
+								fav_city_length = favoriteObj[0].cityName.indexOf('，')
+							}else{
+								fav_city_length = favoriteObj[0].cityName.indexOf(',')
+							}
+							
+							if(fav_city_length == -1 ||fav_city_length == 0){
+								fav_city_length = favoriteObj[0].cityName.length;
+							}
+							
+							//display_favorite_name = favoriteObj[0].cityName.substr(0, favoriteObj[0].cityName.indexOf(',') === -1 ? favoriteObj[0].cityName.length : favoriteObj[0].cityName.indexOf(','));
+							display_favorite_name = favoriteObj[0].cityName.substr(0, fav_city_length);
+							
+								//var sel = '';
+								var sel = (i == 0) ? 'sel' : '';
+							
+								option = $('<option value="' + favoriteObj[0].cityId + '">' + display_favorite_name + '</option>');
+								if(param_val==cityId) option.attr('selected', 'selected');
+								//if (val == default) {
+								//option.attr('selected', 'selected');
+								//}
+								select.append(option);
+							
+						}
+					 }
+					
+					$('.fav_item_mask').html(select);
+						
+					updateFavBar();
+					
+				}else{
+					
+				$('.fav_item_mask').css({'width': (set_max_item * fav_item_w) + 'px'});
+                var obj = $('#fav_item_container');
+                obj.css({'width': (myFavoritesList.length * fav_item_w) + 'px'});
+                for (var i = 0; i < myFavoritesList.length; i++) {
+                    var favoriteType = myFavoritesList[i].substr(0, myFavoritesList[i].indexOf('#'));
+                    var cityId = myFavoritesList[i].substr(myFavoritesList[i].indexOf('#') + 1);
+					
+					var sel = '';
+					if(parseInt(cityId)>600000) {
+						obj.append('<li id="c' + cityId + '"><a class="' + sel + '" href="./city.html?cityId=' + cityId + '"><span id="ecmwffav'+cityId+'"></span></a></li>');
+						continue;
+					}
+					
+                    if (favoriteType == "c") {
+                        if (i == 0 && loadHomeCity) {
+                            //ajax_get_city_info(cityId, 'fav');//!loadHomeCity //20170424
+                        }
+                        favoriteObj = getObjects(member_json_data, 'cityId', cityId);
+						
+						var fav_city_length = 0; //20170418
+						if(pageLang=='zh'||pageLang=='tc'){
+							fav_city_length = favoriteObj[0].cityName.indexOf('，')
+						}else{
+							fav_city_length = favoriteObj[0].cityName.indexOf(',')
+						}
+						
+						if(fav_city_length == -1 ||fav_city_length == 0){
+							fav_city_length = favoriteObj[0].cityName.length;
+						}
+						
+						//display_favorite_name = favoriteObj[0].cityName.substr(0, favoriteObj[0].cityName.indexOf(',') === -1 ? favoriteObj[0].cityName.length : favoriteObj[0].cityName.indexOf(','));
+                        display_favorite_name = favoriteObj[0].cityName.substr(0,fav_city_length);
+                       
+						var sel = '';
+						//obj.append('<li id="c' + favoriteObj[0].cityId + '"><a class="' + sel + '" href="./city.html?cityId=' + favoriteObj[0].cityId + '">' + favoriteObj[0].cityName + '</a></li>');
+						obj.append('<li id="c' + favoriteObj[0].cityId + '"><a class="' + sel + '" href="./city.html?cityId=' + favoriteObj[0].cityId + '">' + display_favorite_name + '</a></li>');
+                    }
+                }
+                var max_item = (myFavoritesList.length > set_max_item) ? set_max_item : myFavoritesList.length;
+
+                updateFavBar();
+				}
+				
+				set_ecmwf_city_name();
+            }
+
+            /*Get all WMO member (i.e. country) info from JSON file*/
+            function ajax_get_present_info(noId) {
+                //var param = new Array(noId);
+                $.ajax({
+                    url: "../../zh/json/present.xml",
+                    type: "GET",
+                    dataType: "text",
+                    async: false,
+                    success: function (Jdata) {
+                        if (Jdata.length > 0) {
+                            present_json_data = JSON.parse(Jdata);
+                            //ajaxRefreshHandling(ajax_get_present_info, "ajaxPresent", 0, param);
+                        } else {
+                            //ajaxRefreshHandling(ajax_get_present_info, "ajaxPresent", 1, param);
+                        }
+                    },
+                    error: function () {
+                        //ajaxRefreshHandling(ajax_get_present_info, "ajaxPresent", 1, param);
+                    }
+                });
+            }
+            
+
+            //load capital city weather forecast information
+            function load_capital_forecast(unit) {
+                var wx_forecast_cap_city = 'Weather forecast of [#City Name#] (capital city)';
+                $('.country_capital').html(wx_forecast_cap_city.replace(/\[#City Name#\]/g, capCityObj[0].cityName));
+
+
+            }
+
+            //Sort the array by city name
+            function SortByCityName(a, b) {
+                var aName = a.enName.toLowerCase();
+                var bName = b.enName.toLowerCase();
+                return aName.localeCompare(bName);
+            }
+
+            function loadCurrentLocalTime() {
+                $('#localTime').html(moment(new Date()).locale(localLang).zone(cityObj[0].timeZone).format('llll'));
+                if (t1 != null) {
+                    clearTimeout(t1);
+                    t1 = null;
+                }
+                t1 = setTimeout(function () {
+                    loadCurrentLocalTime()
+                }, 500);
+            }
+
+            function hash_raintype(type, txt, sen) {
+                var name = '';
+                switch (type) {
+                    case 'rainfall':
+                        name = (txt == 'rf') ? '降水' : '降水';
+                        if (sen == 1) {
+                            name = (txt == 'rf') ? '平均总降水' : '平均总降水';
+                        }
+                        break;
+                    case 'PPT':
+                        name = '降水';
+                        if (sen == 1) {
+                            name = '平均总降水';
+                        }
+                        break;
+                    default:
+                        name = (txt == 'rf') ? '降水' : '降水';
+                        if (sen == 1) {
+                            name = (txt == 'rf') ? '平均总降水' : '平均总降水';
+                        }
+                }
+                return name;
+            }
+
+            function check_climate(item) {
+                var hvValue = false;
+                var climate = cityObj[0].climate.climateMonth;
+                for (var i = 0; i < climate.length; i++) {
+                    if (item == "maxTempC" && climate[i].maxTemp != null && climate[i].maxTemp != '') {
+                        hvValue = true;
+                        break;
+                    }
+                    if (item == "minTempC" && climate[i].minTemp != null && climate[i].minTemp != '') {
+                        hvValue = true;
+                        break;
+                    }
+                    if (item == "maxTempF" && climate[i].maxTempF != null && climate[i].maxTempF != '') {
+                        hvValue = true;
+                        break;
+                    }
+                    if (item == "minTempF" && climate[i].minTempF != null && climate[i].minTempF != '') {
+                        hvValue = true;
+                        break;
+                    }
+                    if (item == "meanTempC" && climate[i].meanTemp != null && climate[i].meanTemp != '') {
+                        hvValue = true;
+                        break;
+                    }
+                    if (item == "meanTempF" && climate[i].meanTempF != null && climate[i].meanTempF != '') {
+                        hvValue = true;
+                        break;
+                    }
+                    if (item == "raindays" && climate[i].raindays != null && climate[i].raindays != '') {
+                        hvValue = true;
+                        break;
+                    }
+                    if (item == "rainfall" && climate[i].rainfall != null && climate[i].rainfall != '') {
+                        hvValue = true;
+                        break;
+                    }
+                }
+                return hvValue;
+            }
+
+			var climateTable_height;
+            //Load Climatological Information in Table
+            function load_table(unit) {
+				
+				var format_unit;
+				if(pageLang == 'ar'){
+					format_unit = unit+'°';
+				}
+				else{
+					
+					format_unit = '°'+unit;
+				}					
+				
+                if (!check_climate("minTemp" + unit) && !check_climate("maxTemp" + unit) && !check_climate("meanTemp" + unit) && !check_climate("raindays") && !check_climate("rainfall")) {
+                    $('#climateTable').html('<div class="not_available">气候资料暂时未能提供。</div>');
+                } else {
+					 
+                    $('#climateTable').each(function () {
+                        $('table', this).remove();
+                    });
+
+                    var months = ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
+                    var na = false;
+
+                    var climate_tbl = $('<table></table>').attr({class: "climateTable"});
+                    //table header
+                    var header = $('<tr></tr>').css({'color': '#ffffff', 'background-color': '#0ebfa2'}).appendTo(climate_tbl);
+                    $('<th></th>').html("月份").appendTo(header); //.attr({'style': 'width:66px;'})
+
+                    if (check_climate("minTemp" + unit)) {
+                        $('<th></th>').html("日平均最低温度 (" + format_unit + ")").appendTo(header); //.attr({'style': 'width:200px;'})
+                    }
+                    if (check_climate("maxTemp" + unit)) {
+                        $('<th></th>').html("日平均最高气温 (" + format_unit + ")").appendTo(header); //.attr({'style': 'width:200px;'})
+                    }
+                    if (!check_climate("minTemp" + unit) && !check_climate("maxTemp" + unit) && check_climate("meanTemp" + unit)) {
+                        $('<th></th>').html("平均温度 (" + format_unit + ")").appendTo(header);
+                    }
+                    if (check_climate("rainfall")) {
+                        $('<th></th>').html(hash_raintype(cityObj[0].climate.raintype, 'rf', 1) + "<br>(亳米)").appendTo(header);
+                    }
+                    if (check_climate("raindays")) {
+                        $('<th></th>').html((cityObj[0].climate.raintype == 'PPT') ? '平均降水日数' : '平均降水日数').appendTo(header);
+                    }
+
+                    for (var i = 0; i < cityObj[0].climate.climateMonth.length; i++) {
+                        var rowbgcolor = (i % 2 == 0) ? '#FFFFFF' : '#e8fbf9';
+                        var row = $('<tr></tr>').appendTo(climate_tbl);
+                        $('<td></td>').attr({'align': 'center'}).css({'color': '#ffffff', 'background-color': '#0ebfa2', 'text-shadow': '1px 1px 0px #5e5e5e'}).html(months[(cityObj[0].climate.climateMonth[i].month - 1)]).appendTo(row);
+                        if (unit == "C") {
+                            if (check_climate("minTemp" + unit)) {
+                                if (cityObj[0].climate.climateMonth[i].minTemp != '')
+									
+                                    $('<td></td>').attr({'align': 'center'}).css({'color': '#383838', 'background-color': rowbgcolor}).html(parseFloat(cityObj[0].climate.climateMonth[i].minTemp).toFixed(1)).appendTo(row);
+                                else {
+                                    $('<td></td>').attr({'align': 'center'}).css({'color': '#383838', 'background-color': rowbgcolor}).html('/').appendTo(row);
+                                    na = true;
+                                }
+                            }
+                            if (check_climate("maxTemp" + unit)) {
+                                if (cityObj[0].climate.climateMonth[i].maxTemp != '')
+                                    $('<td></td>').attr({'align': 'center'}).css({'color': '#383838', 'background-color': rowbgcolor}).html(parseFloat(cityObj[0].climate.climateMonth[i].maxTemp).toFixed(1)).appendTo(row);
+                                else {
+                                    $('<td></td>').attr({'align': 'center'}).css({'color': '#383838', 'background-color': rowbgcolor}).html('/').appendTo(row);
+                                    na = true;
+                                }
+                            }
+                            if (!check_climate("minTemp" + unit) && !check_climate("maxTemp" + unit) && check_climate("meanTemp" + unit)) {
+                                if (cityObj[0].climate.climateMonth[i].meanTemp != '')
+                                    $('<td></td>').attr({'align': 'center'}).css({'color': '#383838', 'background-color': rowbgcolor}).html(parseFloat(cityObj[0].climate.climateMonth[i].meanTemp).toFixed(1)).appendTo(row);
+                                else {
+                                    $('<td></td>').attr({'align': 'center'}).css({'color': '#383838', 'background-color': rowbgcolor}).html('/').appendTo(row);
+                                    na = true;
+                                }
+                            }
+                        }
+                        if (unit == "F") {
+                            if (check_climate("minTemp" + unit)) {
+                                if (cityObj[0].climate.climateMonth[i].minTempF != '')
+                                    $('<td></td>').attr({'align': 'center'}).css({'color': '#383838', 'background-color': rowbgcolor}).html(parseFloat(cityObj[0].climate.climateMonth[i].minTempF).toFixed(1)).appendTo(row);
+                                else {
+                                    $('<td></td>').attr({'align': 'center'}).css({'color': '#383838', 'background-color': rowbgcolor}).html('/').appendTo(row);
+                                    na = true;
+                                }
+                            }
+                            if (check_climate("maxTemp" + unit)) {
+                                if (cityObj[0].climate.climateMonth[i].maxTempF != '')
+                                    $('<td></td>').attr({'align': 'center'}).css({'color': '#383838', 'background-color': rowbgcolor}).html(parseFloat(cityObj[0].climate.climateMonth[i].maxTempF).toFixed(1)).appendTo(row);
+                                else {
+                                    $('<td></td>').attr({'align': 'center'}).css({'color': '#383838', 'background-color': rowbgcolor}).html('/').appendTo(row);
+                                    na = true;
+                                }
+                            }
+                            if (!check_climate("minTemp" + unit) && !check_climate("maxTemp" + unit) && check_climate("meanTemp" + unit)) {
+                                if (cityObj[0].climate.climateMonth[i].meanTempF != '')
+                                    $('<td></td>').attr({'align': 'center'}).css({'color': '#383838', 'background-color': rowbgcolor}).html(parseFloat(cityObj[0].climate.climateMonth[i].meanTempF).toFixed(1)).appendTo(row);
+                                else {
+                                    $('<td></td>').attr({'align': 'center'}).css({'color': '#383838', 'background-color': rowbgcolor}).html('/').appendTo(row);
+                                    na = true;
+                                }
+                            }
+                        }
+                        if (check_climate("rainfall")) {
+                            if (cityObj[0].climate.climateMonth[i].rainfall != '')
+                                $('<td></td>').attr({'align': 'center'}).css({'color': '#383838', 'background-color': rowbgcolor}).html(parseFloat(cityObj[0].climate.climateMonth[i].rainfall).toFixed(1)).appendTo(row);
+                            else {
+                                $('<td></td>').attr({'align': 'center'}).css({'color': '#383838', 'background-color': rowbgcolor}).html('/').appendTo(row);
+                                na = true;
+                            }
+                        }
+                        if (check_climate("raindays")) {
+                            if (cityObj[0].climate.climateMonth[i].raindays != '') {
+                                if (cityObj[0].climate.climateMonth[i].raindays == 'NULL')
+                                    $('<td></td>').attr({'align': 'center'}).css({'background-color': rowbgcolor}).html(cityObj[0].climate.climateMonth[i].raindays).appendTo(row);
+                                else
+                                    $('<td></td>').attr({'align': 'center'}).css({'background-color': rowbgcolor}).html(parseFloat(cityObj[0].climate.climateMonth[i].raindays).toFixed(1)).appendTo(row);
+                            } else {
+                                $('<td></td>').attr({'align': 'center'}).css({'background-color': rowbgcolor}).html('/').appendTo(row);
+                                na = true;
+                            }
+                        }
+                    }
+					
+                    climate_tbl.appendTo($("#climateTable"));
+					
+					$('#climateTable').css('height','auto');
+					
+					let star = (cityObj[0].cityId == 2939 || cityObj[0].cityId == 2941) ? "*" : "";
+					
+                    var remark = '<div align="left"><strong>备注</strong></div>';
+                    remark += '<ol align="left" class="remark_container">';
+
+					if (cityObj[0].climate.datab != '' && cityObj[0].climate.datae != '') {
+						var climatY = '<li>气候信息基于（[#datab#]年-[#datae#]年）[#year_period#]年的月平均。'+star+'</li>';
+						climatY = climatY.replace(/\[#year_period#\]/g,(parseInt(cityObj[0].climate.datae) - parseInt(cityObj[0].climate.datab) + 1));
+						climatY = climatY.replace(/\[#datab#\]/g,cityObj[0].climate.datab);
+						climatY = climatY.replace(/\[#datae#\]/g,cityObj[0].climate.datae);
+						remark += climatY;
+					}
+
+                    if (cityObj[0].climate.tempb != '' && cityObj[0].climate.tempe != '') {
+						var climatT = '<li>平均温度基于（[#tempb#]年-[#tempe#]年）月平均。</li>';
+						climatT = climatT.replace(/\[#tempb#\]/g,cityObj[0].climate.tempb);
+						climatT = climatT.replace(/\[#tempe#\]/g,cityObj[0].climate.tempe);
+                        remark += climatT;
+                    }
+
+                    if (cityObj[0].climate.rdayb != '' && cityObj[0].climate.rdaye != '') {
+						var climatRd = '<li>平均降水/降雨天数基于（[#rdayb#]年-[#rdaye#]年）月平均。</li>';
+						climatRd = climatRd.replace(/\[#rdayb#\]/g,cityObj[0].climate.rdayb);
+						climatRd = climatRd.replace(/\[#rdaye#\]/g,cityObj[0].climate.rdaye);
+						climatRd = climatRd.replace(/\[#raintyperd0#\]/g, hash_raintype(cityObj[0].climate.raintype, 'rd', 0).toLowerCase());
+                        remark += climatRd;
+                    }
+
+                    if (cityObj[0].climate.rainfallb != '' && cityObj[0].climate.rainfalle != '') {
+						var climatRa = '<li>平均降水量/降雨量基于（[#rainfallb#]年-[#rainfalle#]年）月平均。</li>';
+						climatRa = climatRa.replace(/\[#rainfallb#\]/g,cityObj[0].climate.rainfallb);
+						climatRa = climatRa.replace(/\[#rainfalle#\]/g,cityObj[0].climate.rainfalle);
+						climatRa = climatRa.replace(/\[#raintyperf0#\]/g,hash_raintype(cityObj[0].climate.raintype, 'rf', 0).toLowerCase());
+                        remark += climatRa;
+                    }
+
+                    if (cityObj[0].climate.raindef != '') {
+                        var rainunit = (cityObj[0].climate.rainunit != '') ? ' ' + cityObj[0].climate.rainunit : ' ';
+						var climatUn = '<li>平均降水/降雨日数=降水量/降雨量大于[#raindef#]的平均天数。</li>';
+						climatUn = climatUn.replace(/\[#raindef#\]/g,cityObj[0].climate.raindef + rainunit);
+						climatUn = climatUn.replace(/\[#raintyperd0#\]/g,hash_raintype(cityObj[0].climate.raintype, 'rd', 0).toLowerCase());
+                        remark += climatUn;
+                    }
+					
+                    if (cityObj[0].climate.raintype == "PPT" && ((cityObj[0].climate.datab != '' && cityObj[0].climate.datae != '') || (cityObj[0].climate.rdayb != '' && cityObj[0].climate.rdaye != '') || (cityObj[0].climate.rainfallb != '' && cityObj[0].climate.rainfalle != ''))) {
+                        remark += '<li>降水包括降雨和降雪。</li>';
+                    }
+					
+                    remark += '<li>注意：本网站所引用的气候资料的平均区间及平均降水/降雨日数的定义，可能因国家而有所不同。因此，比较城市间气候信息时需要注意。</li>';
+					
+					remark = remark.replace(/\[#raintyperd0#\]/g,hash_raintype(cityObj[0].climate.raintype, 'rd', 0));
+                    remark += '</ol>';
+
+					if (star != "") {
+						remark += '<div style="margin-top: -10px; margin-left: 30px;">* 资料日期不完整</div>';
+					}
+					
+                    $('#remarks').html(remark);
+
+                }
+                changeFontSize(getCookie('fontsize_e'));
+            }
+
+            //Load Climatological Information in High Chart API
+            function load_highchart(unit) {
+				
+				var format_unit;
+				
+				if(pageLang=='ar'){
+					format_unit =  unit+'°';
+				}else{
+					format_unit =  '°'+unit;
+				}
+				
+                if (!check_climate("minTemp" + unit) && !check_climate("maxTemp" + unit) && !check_climate("meanTemp" + unit) && !check_climate("rainfall")) {
+                    $('#climateContainer').css({'display': 'none'});
+                } else {
+                    $('#climateContainer').css({'display': 'block'});
+					
+                    var primary_yAxis = {// Primary yAxis
+                        labels: {
+                            format: '{value}',
+                            style: {
+                                color: '#5F666E'
+                            },
+                            align: 'left',
+                            x: -18,
+                            y: -2
+                        },
+                        showFirstLabel: false,
+                        title: {
+                            text: '温度 (' + format_unit + ')',
+                            style: {
+                                color: '#596679',
+                                fontFamily: 'Verdana',
+                                direction: 'ltr'
+                            },
+                            x: -12
+                        }
+                    };
+                    var secondary_yAxis = {// Secondary yAxis
+                        labels: {
+                            format: '{value}',
+                            style: {
+                                color: '#5F666E'
+                            },
+                            align: 'right',
+                            x: 18,
+                            y: -2
+                        },
+                        showFirstLabel: false,
+                        title: {
+                            text: hash_raintype(cityObj[0].climate.raintype, 'rf', 0) + ' (亳米)',
+                            style: {
+                                color: '#596679',
+                                fontFamily: 'Verdana',
+                                direction: 'ltr'
+                            },
+                            x: 12
+                        },
+                        opposite: true
+                    };
+
+                    var mean_total_rf_or_ppt = {
+                        name: hash_raintype(cityObj[0].climate.raintype, 'rf', 1),
+                        color: '#46cbd4',
+                        type: 'column',
+                        yAxis: 0,
+                        data: [null, null, null, null, null, null, null, null, null, null, null, null]
+                    };
+                    var maximum_temperature = {
+                        name: '平均最高气温',
+                        color: '#eb6877',
+                        type: 'spline',
+                        data: [null, null, null, null, null, null, null, null, null, null, null, null]
+                    };
+                    var minimum_temperature = {
+                        name: '平均最低温度',
+                        color: '#0f91c4',
+                        type: 'spline',
+                        data: [null, null, null, null, null, null, null, null, null, null, null, null]
+                    };
+                    var mean_temperature = {
+                        name: '平均温度',
+                        color: '#990000',
+                        type: 'spline',
+                        data: [null, null, null, null, null, null, null, null, null, null, null, null]
+                    };
+
+                    var prepareChartData = {
+                        chart: {
+                            renderTo: 'climateContainer',
+                            zoomType: 'xy',
+                            backgroundColor: '#ebf1f5', /*{
+                             linearGradient: { x1: 0, y1: 0, x2: 0, y2: 0},
+                             stops: [
+                             [0, 'rgb(236, 241, 245)'],
+                             [1, 'rgb(252, 255, 197)']
+                             ]
+                             },*/
+                            borderRadius: 0,
+                            style: {
+                                fontFamily: 'Verdana',
+                            }
+                        },
+                        title: {
+                            text: '',
+                            style: {
+                                fontFamily: 'Verdana',
+                                fontWeight: 'bold',
+                                color: '#596679'
+                            }
+                        },
+                        xAxis: [{
+                                labels: {style: {
+                                        color: '#5F666E'
+                                    }},
+                                categories: ['一月', '二月', '三月', '四月', '五月', '六月',
+                                    '七月', '八月', '九月', '十月', '十一月', '十二月'],
+                                title: {text: '月份', style: {fontWeight: 'bold', fontFamily: 'Verdana', color: '#596679'}}
+                            }],
+                        credits: {
+                            enabled: false,
+                        },
+                        yAxis: [],
+                        tooltip: {
+                            enabled: false,
+                            shared: true,
+                            style: {
+                                fontWeight: 'bold'
+                            }
+                        },
+                        legend: {
+                            enabled: false
+                        },
+                        series: []
+                    };
+
+                    prepareChartData.title.text = cityObj[0].cityName;
+
+                    var yAxisOffset = 0;
+                    if ((check_climate("minTemp" + unit) && check_climate("maxTemp" + unit)) || check_climate("meanTemp" + unit)) {
+                        prepareChartData.yAxis[yAxisOffset++] = primary_yAxis;
+                        mean_total_rf_or_ppt.yAxis = 1;
+                    }
+                    var seriesOffset = 0;
+                    if (check_climate("rainfall")) {
+                        prepareChartData.yAxis[yAxisOffset++] = secondary_yAxis;
+                        prepareChartData.series[seriesOffset++] = mean_total_rf_or_ppt;
+                    }
+                    if (check_climate("minTemp" + unit) && check_climate("maxTemp" + unit)) {
+                        prepareChartData.series[seriesOffset++] = maximum_temperature;
+                        prepareChartData.series[seriesOffset++] = minimum_temperature;
+                    } else {
+                        if (check_climate("meanTemp" + unit)) {
+                            prepareChartData.series[seriesOffset++] = mean_temperature;
+                        }
+                    }
+
+                    for (var i = 0; i < cityObj[0].climate.climateMonth.length; i++) {
+                        var offset = 0;
+                        if (check_climate("rainfall")) {
+                            prepareChartData.series[offset++].data[i] = parseFloat(cityObj[0].climate.climateMonth[i].rainfall);
+                        }
+                        if (unit == "C" && check_climate("maxTemp" + unit) && check_climate("minTemp" + unit)) {
+                            if (cityObj[0].climate.climateMonth[i].maxTemp != '')
+                                prepareChartData.series[offset].data[i] = parseFloat(cityObj[0].climate.climateMonth[i].maxTemp);
+                            offset++;
+                            if (cityObj[0].climate.climateMonth[i].minTemp != '')
+                                prepareChartData.series[offset].data[i] = parseFloat(cityObj[0].climate.climateMonth[i].minTemp);
+                        } else {
+                            if (unit == "C" && check_climate("meanTemp" + unit)) {
+                                prepareChartData.series[offset++].data[i] = parseFloat(cityObj[0].climate.climateMonth[i].meanTemp);
+                            }
+                        }
+                        if (unit == "F" && check_climate("maxTemp" + unit) && check_climate("minTemp" + unit)) {
+                            if (cityObj[0].climate.climateMonth[i].maxTempF != '')
+                                prepareChartData.series[offset].data[i] = parseFloat(cityObj[0].climate.climateMonth[i].maxTempF);
+                            offset++;
+                            if (cityObj[0].climate.climateMonth[i].minTempF != '')
+                                prepareChartData.series[offset].data[i] = parseFloat(cityObj[0].climate.climateMonth[i].minTempF);
+                        } else {
+                            if (unit == "F" && check_climate("meanTemp" + unit)) {
+                                prepareChartData.series[offset++].data[i] = parseFloat(cityObj[0].climate.climateMonth[i].meanTempF);
+                            }
+                        }
+                    }
+
+                    var chart = new Highcharts.Chart(prepareChartData);
+                }
+            }
+
+            function load_present(currentTempUnit) {
+
+                //var mn = (moment().format('H') >= 18 || moment().format('H') < 6) ? 'b' : 'a';
+                var present = getObjects(present_json_data, 'cityId', cityObj[0].cityId);
+
+
+                if (present.length > 0) {
+				
+					
+					var wind_speed = String(present[0].ws);
+					var sunrise = String(present[0].sunrise);
+					var sunset = String(present[0].sunset);
+					var sundate = present[0].sundate;
+					
+					if(present[0].sunrise == ""){
+						sunrise = "";
+					}
+					
+					if(present[0].sunset == ""){
+						sunset = "";
+					}
+				
+					if(present[0].sundate == ""){
+						sundate = "";
+					}
+				
+					
+					var display_wind;
+					var present_temp = String(present[0].temp);
+					var present_rh = String(present[0].rh);
+                    var daynightcode = present[0].daynightcode;
+                    $('.city_currwx_box').css('display', 'block');
+                    var currwxicon = (present[0].wxImageCode.length > 0) ? parseInt(present[0].wxImageCode) : -1;
+
+					//sunrise = convert_24_2_12_hour(sunrise);
+					//sunset = convert_24_2_12_hour(sunset);
+					
+					if(sundate ==""){
+						$('.sun_date').html("");
+					}else{
+						sundate = sundate.substring(0,4)+'-'+sundate.substring(4,6)+'-'+sundate.substring(6,8);
+						$('.sun_date').html(moment(sundate).locale(localLang).format('D MMM'));
+					}
+					
+					if(sunrise ==""){
+						$('.sunrise_time').html("");
+					}else{
+						sunrise = sundate+' '+sunrise;
+						$('.sunrise_time').html(moment(sunrise).locale(localLang).format('LT'));
+					}
+						
+					if(sunset ==""){
+						$('.sunset_time').html("");
+					}else{
+						sunset = sundate+' '+sunset;
+						$('.sunset_time').html(moment(sunset).locale(localLang).format('LT'));
+					}
+					
+
+						if (localLang == 'en') {
+							if(sundate==""){
+								$('.sun_date').html("");
+							}else{
+								$('.sun_date').html(moment(sundate).locale(localLang).format('DD MMM YYYY'));
+							}
+						}
+						
+                        if (localLang == 'zh-cn' || localLang == 'zh-tw' || localLang == 'ja') {
+							
+							if(sundate==""){
+								$('.sun_date').html("");
+							}else{
+								$('.sun_date').html(moment(sundate).locale(localLang).format('MMMDD[日]'));	
+							}	
+                        }
+						
+                        if (localLang == 'de') {
+							
+							if(sundate==""){
+								$('.sun_date').html("");
+							}else{
+								$('.sun_date').html(moment(sundate).locale(localLang).format('D[.] MMM'));
+							}
+							
+                        }
+
+					
+					
+                    if (currwxicon == -1) {
+                    
+                        $('.city_wxicon_block').css('display', 'none');
+                        $('.temp_block, .rh_block, #currwx_icon').css('display', 'none');
+                        $('.temp_block1, .rh_block1').css('display', 'block');
+                    } else {
+                        $('.temp_block, .rh_block, #currwx_icon').css('display', 'block');
+                        $('.temp_block1, .rh_block1').css('display', 'none');
+                    }
+                    //$('#currwx_icon').removeAttr('class').addClass('weather_icon1').addClass('wxico_l_' + currwxicon + daynightcode).attr('title', present[0].wxdesc);
+					$('#currwx_icon').removeAttr('class').addClass('weather_icon1').addClass('wxico_l_' + currwxicon + daynightcode).attr('title', langDescJson["wxdesc"][present[0].iconNum]);
+
+					  if (present_temp != '' && present_temp != '') {
+						  beta_msg(); //20170420 
+					   if (currentTempUnit == "F") {
+							$('.present_temp_value').html(convert_c2f(present_temp)+"°F");
+							//$('.present_temp_unit').html("°F");
+						} else {
+							$('.present_temp_value').html(Math.round(present_temp)+"°C");
+							//$('.present_temp_unit').html("°C");
+						}
+
+					  
+					  }else{
+						 $(".city_temp_block").css("display", "none");
+							
+					  }
+					
+                   
+                    if (present_rh != "" && present_rh != null) { //20170201
+						$('.present_rh_value').html(present_rh+"%");
+
+                    } else {
+                        $(".city_rh_block").css("display", "none");
+                    }
+				
+					var windDirection = "";
+					  // && present[0].wd != "Calm" 
+						windDirection = present[0].wd;
+						if(pageLang == 'zh' || pageLang == 'tc'){
+							if(pageLang == 'zh'){
+								if(windDirection=='N'){
+									windDirection = '北';
+								}
+								
+								if(windDirection=='NNE'){
+									windDirection = '北东北';
+								}
+								
+								if(windDirection=='NE'){
+									windDirection = '东北';
+								}
+								
+								if(windDirection=='ENE'){
+									windDirection = '东东北';
+								}
+								
+								if(windDirection=='E'){
+									windDirection = '东';
+								}
+								
+								if(windDirection=='ESE'){
+									windDirection = '东东南';
+								}
+								
+								if(windDirection=='SE'){
+									windDirection = '东南';
+								}
+								
+								if(windDirection=='SSE'){
+									windDirection = '南东南';
+								}
+								
+								
+								if(windDirection=='S'){
+									windDirection = '南';
+								}
+								
+								
+								if(windDirection=='SSW'){
+									windDirection = '南西南';
+								}
+								
+								
+								if(windDirection=='SW'){
+									windDirection = '西南';
+								}
+								
+								if(windDirection=='WSW'){
+									windDirection = '西西南';
+								}
+								
+								if(windDirection=='W'){
+									windDirection = '西';
+								}
+								
+								if(windDirection=='WNW'){
+									windDirection = '西西北';
+								}
+								
+								if(windDirection=='NW'){
+									windDirection = '西北';
+								}
+								
+								if(windDirection=='NNW'){
+									windDirection = '北西北';
+								}
+								
+							
+							}
+							
+						if(pageLang == 'tc'){
+								if(windDirection=='N'){
+									windDirection = '北';
+								}
+								
+								if(windDirection=='NNE'){
+									windDirection = '東北偏北';
+								}
+								
+								if(windDirection=='NE'){
+									windDirection = '東北';
+								}
+								
+								if(windDirection=='ENE'){
+									windDirection = '東北偏東';
+								}
+								
+								if(windDirection=='E'){
+									windDirection = '東';
+								}
+								
+								if(windDirection=='ESE'){
+									windDirection = '東南偏東';
+								}
+								
+								if(windDirection=='SE'){
+									windDirection = '東南';
+								}
+								
+								if(windDirection=='SSE'){
+									windDirection = '東南偏南';
+								}
+								
+								
+								if(windDirection=='S'){
+									windDirection = '南';
+								}
+								
+								
+								if(windDirection=='SSW'){
+									windDirection = '西南偏南';
+								}
+								
+								
+								if(windDirection=='SW'){
+									windDirection = '西南';
+								}
+								
+								if(windDirection=='WSW'){
+									windDirection = '西南偏西';
+								}
+								
+								if(windDirection=='W'){
+									windDirection = '西';
+								}
+								
+								if(windDirection=='WNW'){
+									windDirection = '西北偏西';
+								}
+								
+								if(windDirection=='NW'){
+									windDirection = '西北';
+								}
+								
+								if(windDirection=='NNW'){
+									windDirection = '西北偏北';
+								}
+								
+							
+							}
+
+							
+						}
+
+                    if (wind_speed != "" && wind_speed != null) { //wind control
+                        var windSpeedValue = "";
+
+                        if (currentWindUnit == "km/h") {
+                            windSpeedValue = convert_m2km(present[0].ws);
+                        }
+
+                        if (currentWindUnit == "m/s") {
+                            windSpeedValue = wind_speed;
+                        }
+						
+						if (present[0].wd == "VBR"){ 
+							display_wind = windSpeedValue + " " + currentWindUnit;
+
+						}else if(present[0].wd == "Calm"){
+
+							display_wind = windSpeedValue + " " + currentWindUnit ;
+			
+						}else{
+							display_wind = windDirection + " " +windSpeedValue + " " + currentWindUnit;	
+						}
+					
+
+
+                        $('.present_wind_value').html(display_wind);
+                    } else {
+                        $(".city_wind_block").css("display", "none");
+                    }
+
+
+                    if (present[0].issue != false) {
+                        var issue_str = (present[0].issue.length < 12) ? ('20' + present[0].issue.substring(0, 2) + '-' + present[0].issue.substring(2, 4) + '-' + present[0].issue.substring(4, 6) + ' ' + present[0].issue.substring(6, 8) + ':00') : (present[0].issue.substring(0, 4) + '-' + present[0].issue.substring(4, 6) + '-' + present[0].issue.substring(6, 8) + ' ' + present[0].issue.substring(8, 10) + ':' + present[0].issue.substring(10, 12));
+                        $('.city_currwx_issuetime').html(moment(issue_str).locale(localLang).format('llll').replace("00分", "正") + ' (当地时间)');
+                    } else {
+                        $('.city_currwx_box').css('display', 'none');
+                    }
+
+                } else { //no present data
+
+                    $("#currwx_icon").css("display", "none");
+                    $(".city_temp_block").css("display", "none");
+                    $(".city_wind_block").css("display", "none");
+                    $(".city_rh_block").css("display", "none");
+					
+					$(".sun_status").css("display", "none");
+                }
+            }
+			
+			function load_ecmwf_forecast(cityId, unit, noOfFcst, lastFcstDate) {
+
+				var tmpReset = false; //(cityId == 1223);
+
+				$.ajax({
+					url: './json/'+cityId+'_model_data_zh.json',
+					type: "GET",
+					dataType: "json",
+					error: function(){
+						console.log('404 Not Found');
+						if($('.city_forecast_day_object').length==0) {
+							$('.city_fc_block').css('display', 'none');
+							$('#no_weather_forecast').html('<div class="not_available">天气预报信息暂时未能提供。</div>');
+						}
+					},
+					success: function(ecmwfData) {
+						//console.log(ecmwfData);
+						tmpppp = ecmwfData;
+						var getNumOfFcst = 5 - noOfFcst;
+						var fcstObj = ecmwfData.city.forecast.forecastDay;
+						//console.log(getNumOfFcst);
+						for (var i = 0; i < fcstObj.length; i++) {
+							var forecast_date = fcstObj[i].forecastDate;
+							if((parseInt(forecast_date.split("-").join(""))>parseInt(lastFcstDate.split("-").join("")) || lastFcstDate=="") && getNumOfFcst != 0) {
+								//console.log(forecast_date + ' vs ' + lastFcstDate);
+								var mn = 'a';
+								var maxTemp = (unit == "C") ? ((fcstObj[i].maxTemp != null && fcstObj[i].maxTemp != '') ? fcstObj[i].maxTemp + '°' + unit : '') : ((fcstObj[i].maxTempF != null && fcstObj[i].maxTempF != '') ? fcstObj[i].maxTempF + '°' + unit : '');
+								var minTemp = (unit == "C") ? ((fcstObj[i].minTemp != null && fcstObj[i].minTemp != '') ? fcstObj[i].minTemp + '°' + unit : '') : ((fcstObj[i].minTempF != null && fcstObj[i].minTempF != '') ? fcstObj[i].minTempF + '°' + unit : '');
+
+								var symbol = (maxTemp != '' && minTemp != '') ? ' | ' : '';
+
+								var icon = fcstObj[i].weatherIcon.toString().substr(0, (fcstObj[i].weatherIcon.toString().length - 2));
+								icon = parseInt(icon);
+								
+								var f_d = moment(fcstObj[i].forecastDate).locale(localLang).format('D MMM<br/>[(]ddd[)]');
+								if (localLang == 'zh-cn' || localLang == 'zh-tw' || localLang == 'ja') {
+									f_d = moment(fcstObj[i].forecastDate).locale(localLang).format('ll<br/>[(]ddd[)]');
+									f_d = f_d.substr(5).replace("周", "").replace("週", "");
+								}
+								if (localLang == 'de') {
+									f_d = moment(fcstObj[i].forecastDate).locale(localLang).format('D[.] MMM<br/>[(]ddd[)]');
+								}
+								if (localLang == 'kr') {
+									f_d = moment(fcstObj[0].forecast.forecastDay[i].forecastDate).locale('ko').format('MMM Do [(]ddd[)]');
+								}
+								var wxdesc = fcstObj[i].weather;
+								if (fcstObj[i].wxdesc != '' && fcstObj[i].wxdesc!=null) {
+									wxdesc = fcstObj[i].wxdesc;
+								}
+								
+			var objClassname = (tmpReset) ? "city_forecast_day_object" : "city_ecmwf_forecast_day_object";
+			var remarkSymbol = (tmpReset) ? "" : "*";
+
+								if (localLang == 'ar') {
+									$('.city_container').append('<div class="'+objClassname+'"><div class="city_weekday_n_date"><div class="city_fc_date">' + f_d + '</div></div><div class="city_fc_temp"></span><span class="max_temp_icon">' + maxTemp + '</span><span class="forecast_symbol_icon">' + symbol + '</span><span class="min_temp_box">' + minTemp + '</span></div><div class="city_weather_icon" title="' + wxdesc + '"><span class="wxico' + icon + ((icon >= 21 && icon <= 25) ? mn : '') + '"></span></div><div class="city_fc_desc">' + wxdesc + '</div><div class="div_ecmwf_logo"><span class="ecmwf_logo">'+remarkSymbol+'</span></div></div>');
+							  
+								}else{
+									$('.city_container').append('<div class="'+objClassname+'"><div class="city_weekday_n_date"><div class="city_fc_date">' + f_d + '</div></div><div class="city_fc_temp"><span class="min_temp_box">' + minTemp + '</span><span class="forecast_symbol_icon">' + symbol + '</span><span class="max_temp_icon">' + maxTemp + '</span></div><div class="city_weather_icon" title="' + wxdesc + '"><span class="wxico' + icon + ((icon >= 21 && icon <= 25) ? mn : '') + '"></span></div><div class="city_fc_desc">' + wxdesc + '</div><div class="div_ecmwf_logo"><span class="ecmwf_logo">'+remarkSymbol+'</span></div></div>');
+								}
+								
+								getNumOfFcst--;
+							}
+						}
+						
+						$('#no_weather_forecast').css('display', 'none');
+						
+						var modelTime = ecmwfData.city.forecast.modelTime;
+						var tmp = $('.city_forecast_issuetime').html();
+					if(!tmpReset) {
+						if(tmp!="") tmp += '&nbsp;&nbsp;|&nbsp;&nbsp;';
+												tmp += '基于 '+modelTime.substr(0,4)+'-'+modelTime.substr(4,2)+'-'+modelTime.substr(6,2)+' '+modelTime.substr(8,2)+'UTC 模型运行';
+																								
+																														$('.city_forecast_issuetime').html(tmp);
+					} else {
+						$('.city_forecast_issuetime').html('Issued at 11:43 AM (Local Time) 6 Dec 2020');
+					}
+						
+						if(!tmpReset) $('.model_run_remark').html('<strong>*</strong> 与该城市的国家气象预报部门协商并获其同意，该城市的天气预报使用的是由欧洲中期天气预报中心（ECMWF）模式直接输出的数据');
+						
+						changeFontSize(getCookie('fontsize_e'));
+					}
+				});
+			}
+
+            //Load Weather Forecast Information
+            function load_forecast(unit) {
+
+                //var mn = (moment().format('H') >= 18 || moment().format('H') < 6) ? 'b' : 'a';
+                var mn = 'a';
+                $('.city_container').html('');
+             
+				//get present weather data 20170309//
+				var present_temp = '';
+				var present_wx = '';
+				var present_rh = '';
+				var present_issue_date = '';
+				
+				if(parseInt(cityObj[0].cityId)<60001) {
+					var present = getObjects(present_json_data, 'cityId', cityObj[0].cityId);
+						
+					if(present[0].temp!='' && present[0].temp !=null){
+						present_temp = String(present[0].temp);
+					}
+						
+					if(present[0].wxImageCode!='' && present[0].wxImageCode !=null){
+						present_wx = String(present[0].wxImageCode);
+					}
+					
+					if(present[0].rh!='' && present[0].rh !=null){
+						present_rh = String(present[0].rh);
+					}
+				
+					if(present[0].issue!='' && present[0].issue !=null){
+						present_issue_date = (present[0].issue.length < 12) ? ('20' + present[0].issue.substring(0, 2) + '-' + present[0].issue.substring(2, 4) + '-' + present[0].issue.substring(4, 6) + ' ' + present[0].issue.substring(6, 8) + ':00') : (present[0].issue.substring(0, 4) + '-' + present[0].issue.substring(4, 6) + '-' + present[0].issue.substring(6, 8) );
+					}
+				
+					
+					var forecastObj = cityObj[0].forecast.forecastDay;
+					/*if(forecastObj.length == 0) {
+						$('.city_fc_block').css('display', 'none'); //20170206
+
+						$('#no_weather_forecast').html('<div class="not_available">天气预报信息暂时未能提供。</div>');
+					}*/
+					
+					var numOfForecast = 0;
+					var lastForecastDate = "";
+/****** skip live data for Slovakia ******/
+var skiplivedata = (parseInt(cityObj[0].cityId)==41 || (parseInt(cityObj[0].cityId)>=1223 && parseInt(cityObj[0].cityId)<=1229));
+/****** skip live data for Slovakia ******/
+
+					for (var i = 0; i < forecastObj.length && !skiplivedata; i++) {
+						var show_status = 0;
+							
+						var forecast_date = forecastObj[i].forecastDate;
+
+						if(present_issue_date ==''){
+							show_status =0;
+						}
+						
+						if(present_issue_date !='' && present_issue_date == forecast_date){
+							show_status =1;
+							
+							if(present[0].temp!='' && present[0].temp != null){
+									if(currentTempUnit == "F"){
+										if(convert_c2f(present[0].temp) >= forecastObj[i].minTempF && present[0].temp <= forecastObj[i].maxTempF && forecastObj[i].minTempF != '' && forecastObj[i].maxTempF != ''&& forecastObj[i].minTempF != null && forecastObj[i].maxTempF != null){
+											show_status =0;
+										}else if((forecastObj[i].minTempF == ''|| forecastObj[i].minTempF == null) && convert_c2f(present[0].temp) <= forecastObj[i].maxTempF){
+											show_status =0;
+										}else{
+											show_status = 1;
+										}
+											
+									}
+									
+									
+									if(currentTempUnit == "C"){
+										if(present[0].temp >= forecastObj[i].minTemp && present[0].temp <= forecastObj[i].maxTemp && forecastObj[i].minTemp != '' && forecastObj[i].maxTemp != ''&& forecastObj[i].minTemp != null && forecastObj[i].maxTemp != null){
+											show_status =0;
+										}else if((forecastObj[i].minTemp == ''|| forecastObj[i].minTemp == null) && present[0].temp <= forecastObj[i].maxTemp){
+											show_status =0;
+										}else{
+										 show_status = 1;
+										}
+									}
+
+								}else{
+									show_status =0;
+
+								}
+
+							}else{
+								show_status =0;
+							}
+							
+							
+						
+						//if(i < 5) {
+						//var maxTemp = (unit == "C") ? ((forecastObj[i].maxTemp != null && forecastObj[i].maxTemp != '') ? forecastObj[i].maxTemp : '') : ((forecastObj[i].maxTempF != null && forecastObj[i].maxTempF != '') ? forecastObj[i].maxTempF : '');
+						//var minTemp = (unit == "C") ? ((forecastObj[i].minTemp != null && forecastObj[i].minTemp != '') ? forecastObj[i].minTemp : '') : ((forecastObj[i].minTempF != null && forecastObj[i].minTempF != '') ? forecastObj[i].minTempF : '');
+
+						if(show_status == 0){
+							
+							//if (localLang == 'ar') {
+							//	var maxTemp = (unit == "C") ? ((forecastObj[i].maxTemp != null && forecastObj[i].maxTemp != '') ?  unit + '°' +forecastObj[i].maxTemp : '') : ((forecastObj[i].maxTempF != null && forecastObj[i].maxTempF != '') ? forecastObj[i].maxTempF + '°' + unit : ''); //20161223
+							//	var minTemp = (unit == "C") ? ((forecastObj[i].minTemp != null && forecastObj[i].minTemp != '') ?  unit + '°'+ forecastObj[i].minTemp : '') : ((forecastObj[i].minTempF != null && forecastObj[i].minTempF != '') ? forecastObj[i].minTempF + '°' + unit : ''); //20161223
+					   
+							//}else{
+								var maxTemp = (unit == "C") ? ((forecastObj[i].maxTemp != null && forecastObj[i].maxTemp != '') ? forecastObj[i].maxTemp + '°' + unit : '') : ((forecastObj[i].maxTempF != null && forecastObj[i].maxTempF != '') ? forecastObj[i].maxTempF + '°' + unit : ''); //20161223
+								var minTemp = (unit == "C") ? ((forecastObj[i].minTemp != null && forecastObj[i].minTemp != '') ? forecastObj[i].minTemp + '°' + unit : '') : ((forecastObj[i].minTempF != null && forecastObj[i].minTempF != '') ? forecastObj[i].minTempF + '°' + unit : ''); //20161223
+					   
+							//}
+					   //var minTemp = (unit == "C") ? ((forecastObj[i].minTemp != null && forecastObj[i].minTemp != '') ? forecastObj[i].minTemp  : '') : ((forecastObj[i].minTempF != null && forecastObj[i].minTempF != '') ? forecastObj[i].minTempF  : ''); //20161223
+
+						var symbol = (maxTemp != '' && minTemp != '') ? ' | ' : '';
+
+						var icon = forecastObj[i].weatherIcon.toString().substr(0, (forecastObj[i].weatherIcon.toString().length - 2));
+						
+						var f_d = moment(forecastObj[i].forecastDate).locale(localLang).format('D MMM<br/>[(]ddd[)]'); //20170201
+						//var weekday = moment(forecastObj[i].forecastDate).locale(localLang).format('ddd');
+						if (localLang == 'zh-cn' || localLang == 'zh-tw' || localLang == 'ja') {
+							f_d = moment(forecastObj[i].forecastDate).locale(localLang).format('ll<br/>[(]ddd[)]');
+							f_d = f_d.substr(5).replace("周", "").replace("週", "");
+						}
+						if (localLang == 'de') {
+							f_d = moment(forecastObj[i].forecastDate).locale(localLang).format('D[.] MMM<br/>[(]ddd[)]');
+						}
+						if (localLang == 'kr') {
+							f_d = moment(forecastObj[0].forecast.forecastDay[i].forecastDate).locale('ko').format('MMM Do [(]ddd[)]');
+						}
+						var wxdesc = forecastObj[i].weather;
+						if (forecastObj[i].wxdesc != '' && forecastObj[i].wxdesc!=null) {
+							wxdesc = forecastObj[i].wxdesc;
+						}
+					   //$('.city_container').append('<div class="city_forecast_day_object"><div class="city_weekday_n_date"><div class="city_fc_weekday">' + weekday + '</div><div class="city_fc_date">' + f_d + '</div></div><div class="city_weather_icon" title="' + wxdesc + '"><span class="wxico' + icon + ((icon >= 21 && icon <= 25) ? mn : '') + '"></span></div><div class="city_fc_temp"><span class="min_temp_box">' + minTemp + '</span><span class="forecast_symbol_icon">' + symbol + '</span><span class="max_temp_icon">' + maxTemp + '</div><div class="city_fc_desc">' + wxdesc + '</div></div>');
+
+						if (localLang == 'ar') {
+							$('.city_container').append('<div class="city_forecast_day_object"><div class="city_weekday_n_date"><div class="city_fc_date">' + f_d + '</div></div><div class="city_fc_temp"></span><span class="max_temp_icon">' + maxTemp + '</span><span class="forecast_symbol_icon">' + symbol + '</span><span class="min_temp_box">' + minTemp + '</span></div><div class="city_weather_icon" title="' + wxdesc + '"><span class="wxico' + icon + ((icon >= 21 && icon <= 25) ? mn : '') + '"></span></div><div class="city_fc_desc">' + wxdesc + '</div></div>');
+					  
+						}else{
+							$('.city_container').append('<div class="city_forecast_day_object"><div class="city_weekday_n_date"><div class="city_fc_date">' + f_d + '</div></div><div class="city_fc_temp"><span class="min_temp_box">' + minTemp + '</span><span class="forecast_symbol_icon">' + symbol + '</span><span class="max_temp_icon">' + maxTemp + '</span></div><div class="city_weather_icon" title="' + wxdesc + '"><span class="wxico' + icon + ((icon >= 21 && icon <= 25) ? mn : '') + '"></span></div><div class="city_fc_desc">' + wxdesc + '</div></div>');
+						}
+						//}
+						
+						numOfForecast++;
+						lastForecastDate = forecastObj[i].forecastDate;
+					}
+
+					
+						$('#no_weather_forecast').css('display', 'none'); //20170206
+
+						var tz = '';
+						switch (cityObj[0].forecast.timeZone) {
+							case "Local":
+								tz = "当地时间";
+								break;
+							case "UTC":
+								tz = "世界时";
+								break;
+							case "EDT":
+								tz = "东部标准时";
+								break;
+						}
+						var i_d = moment(cityObj[0].forecast.issueDate).locale(localLang).format('ll');
+						var i_t = moment(cityObj[0].forecast.issueDate).locale(localLang).format('LT');
+												i_t = i_t.replace("00分", "正");
+												$('.city_forecast_issuetime').html('发布时间为 ' + i_d + ' \(' + tz + '\) ' + i_t);											
+
+					changeFontSize(getCookie('fontsize_e'));
+
+					//if(cityObj[0].forecast.forecastDay.length == 0) {
+					//	$('#forecastTable').css('display', 'none');
+					//	$('#forecastDetails').css('display', 'block');
+					//	$('#forecastDetails').html('<div class="not_available">Weather forecast information is not available at this moment.</div>');
+					//} else {
+					//$('#forecastDetails').html('');
+					//$('#forecastDetails').css('display', 'none');
+
+					//}
+					}
+					
+					if(numOfForecast < 5) {
+						if(cityObj[0].member["memId"] == 5 || cityObj[0].member["memId"] == 11 || cityObj[0].member["memId"] == 174 || cityObj[0].member["memId"] == 59 || cityObj[0].member["memId"] == 149 || cityObj[0].member["memId"] == 84 || cityObj[0].member["memId"] == 110) {
+							load_ecmwf_forecast(cityObj[0].cityId, unit, numOfForecast, lastForecastDate);
+						} else {
+							if(numOfForecast==0) {
+								$('.city_fc_block').css('display', 'none');
+								$('#no_weather_forecast').html('<div class="not_available">天气预报信息暂时未能提供。</div>');
+							}
+						}
+					}
+				} else {
+					$('#no_weather_forecast').css('display', 'none');
+					if(cityObj[0].member["memId"] == 5 || cityObj[0].member["memId"] == 11 || cityObj[0].member["memId"] == 174 || cityObj[0].member["memId"] == 59 || cityObj[0].member["memId"] == 149 || cityObj[0].member["memId"] == 84 || cityObj[0].member["memId"] == 110) {
+						load_ecmwf_forecast(cityObj[0].cityId, unit, 0, '');
+					}
+				}
+            }
+
+            //build the website breadcrumb
+            function build_breadcrumb() {
+                $('#breadcrumb').append('<li><a href="./region.html?ra=' + cityObj[0].member.ra + '">' + regionArray[(cityObj[0].member.ra - 1)] + '</a> &gt;</li>');
+                $('#breadcrumb').append('<li><a href="./country.html?countryCode=' + cityObj[0].member.memId + '">' + cityObj[0].member.memName + '</a> &gt;</li>');
+                $('#breadcrumb').append('<li><a href="./city.html?cityId=' + cityObj[0].cityId + '">' + cityObj[0].cityName + '</a></li>');
+                changeFontSize(getCookie('fontsize_e'));
+            }
+
+            //setup content include breadcrumb, country info, capital city info (if exist)
+            //      , initaialize map and alphabetical index search
+            function setup_content() {
+
+                $('title').html( "世界天气信息服务网");
+				//$('title').html(cityObj[0].cityName + " | 世界天气信息服务网");
+				
+                //$('.city_name').html(cityObj[0].cityName);
+				$('.m_city_name').html(cityObj[0].cityName +'<a class="link_ico_add" id="favButton" href="javascript:addToMyFavoriteList(' + cityObj[0].cityId + ', \'city_no\', false);"><span class="ico_add">&#10010;</span></a>');
+
+                if (!isExistInCookie('myFavorite_e', '|', 'c#' + cityObj[0].cityId)) {
+                    $('.city_name').html(cityObj[0].cityName + '<a class="link_ico_add" id="favButton" href="javascript:addToMyFavoriteList(' + cityObj[0].cityId + ', \'city_no\', false);"><span class="ico_add">&#10010;</span></a>');
+                } else {
+                    $('.city_name').html(cityObj[0].cityName);
+                    $('.link_ico_add').css('display', 'none');
+                }
+                $('.city_country').html('<a href="./country.html?countryCode=' + cityObj[0].member.memId + '" class="city_place_name_member">' + cityObj[0].member.memName + '</a>');
+				
+				if(cityObj[0].member.logo) {
+					if (cityObj[0].member.logo.length > 0) {
+						var style = (cityObj[0].member.logo.search(/hko_logo/) > -1) ? "style='width: 253px;' " : "";
+						//20170201	$('#logo').html('<a href="http://' + cityObj[0].member.url + '" target="_blank"><img src="/images/logo/' + cityObj[0].member.logo + '" alt="' + cityObj[0].member.orgName + '" onload="this.width*=0.65;this.onload=null;"></a>');
+						if (cityObj[0].member.memId == 56 || cityObj[0].member.memId == 2 || cityObj[0].member.memId == 152 || cityObj[0].member.memId == 83 || cityObj[0].member.memId == 186 || cityObj[0].member.memId == 199 || cityObj[0].member.memId == 200 || cityObj[0].member.memId == 137 || cityObj[0].member.memId == 30 || cityObj[0].member.memId == 145) {
+						$('#logo').html('<a href="https://' + cityObj[0].member.url + '" target="_blank"><img '+style+'src="../images/logo/' + cityObj[0].member.logo + '" alt="' + cityObj[0].member.orgName + '"></a>');
+						} else {
+						$('#logo').html('<a href="http://' + cityObj[0].member.url + '" target="_blank"><img '+style+'src="../images/logo/' + cityObj[0].member.logo + '" alt="' + cityObj[0].member.orgName + '"></a>');	
+						}
+					} else {
+						$('#logo').remove();
+					}
+				}
+                if (cityObj[0].member.orgName != '' && cityObj[0].member.orgName != null) {
+                    if (cityObj[0].member.url.length > 0) {
+						if (cityObj[0].member.memId == 56 || cityObj[0].member.memId == 2 || cityObj[0].member.memId == 152 || cityObj[0].member.memId == 83 || cityObj[0].member.memId == 186 || cityObj[0].member.memId == 199 || cityObj[0].member.memId == 200 || cityObj[0].member.memId == 137 || cityObj[0].member.memId == 30 || cityObj[0].member.memId == 145) {
+                        $('#website').html('<a href="https://' + cityObj[0].member.url + '" target="_blank">' + cityObj[0].member.orgName + '</a>');
+						} else {
+						 $('#website').html('<a href="http://' + cityObj[0].member.url + '" target="_blank">' + cityObj[0].member.orgName + '</a>');
+						}
+                    } else {
+                        $('#website').html(cityObj[0].member.orgName);
+                    }
+                }
+				
+				 				
+                //favButton_handler(cityObj[0].cityId);
+
+                //loadCurrentLocalTime();
+                //var currentTempUnit = "C";
+                //var currentTempUnit = getCookie('tempUnit_e');
+
+               
+				
+				var displayTempUnit = " (°" + currentTempUnit + ") ";
+               
+				
+				$(".temp_current_unit").text(displayTempUnit); //20161223
+                load_present(currentTempUnit);
+                load_forecast(currentTempUnit);
+                load_highchart(currentTempUnit);
+                load_table(currentTempUnit);
+                //initialize_temp_unit(currentTempUnit);
+
+                t2 = setTimeout(function () {
+                    clearTimeout(t);
+					
+                    //ajax_get_member_info(cityObj[0].member.memId);
+					get_member_info(cityObj[0].member.memId);
+                }, 150);
+            }
+			
+			
+			function get_member_info(memId)
+			{
+				//json_data = JSON.parse(Jdata);
+                        member_json_data = member_json_data_map;
+                        delete member_json_data.member['lang'];
+                        memberObj = getObjects(member_json_data, 'memId', memId);
+                        if (memberObj.length > 0) {
+                            //ajax_get_region_info();
+                            //setup_content();
+                            loadMyFavorites(true);
+                        } else {
+                            window.location.href = './error.html';
+                        }
+                        var memberCityObj = getObjects(member_json_data, 'memId', memId);
+
+                        if (memberCityObj[0].city.length > 0) {
+                            if ($('.city_map').is(':visible') && $('.city_map').height() !=0) {
+								setCookie('map_e_lat',parseFloat(memberCityObj[0].countryLatitude), 30); //save lat lng
+								setCookie('map_e_lng',parseFloat(memberCityObj[0].countryLongitude), 30);//save lat lng
+								setCookie('map_e_zoom','3', 30);//save lat lng
+								//console.log('in city lng'+getCookie('map_e_lng'));
+								                            }
+                        } else {
+                            console.log("ERROR!!!");
+                        }
+			}
+
+           
+
+            /*Use city ID to get city info from JSON file*/
+            function ajax_get_city_info(cityId, cat) {//loadHomeCity
+                //var param = new Array(cityId, loadHomeCity);
+				
+				var dataSourceURL = (parseInt(cityId)>600000) ? "../../zh/json/" + cityId + "_model_data_zh.json" : "../../zh/json/" + cityId + "_zh.xml";
+				
+					$.ajax({
+						url: dataSourceURL,
+						type: "GET",
+						dataType: "text",
+						success: function (Jdata) {
+							if (Jdata.length > 0) {
+								json_data = JSON.parse(Jdata);
+								if (cat == 'cap') {
+									capCityObj = getObjects(json_data, 'cityId', cityId);
+									//load_capital_forecast(); //currentTempUnit
+									//loadCurrentLocalTime();
+								} else if (cat == 'fav') {
+									forecastCityObj = getObjects(json_data, 'cityId', cityId);
+								} else {
+									cityObj = getObjects(json_data, 'cityId', cityId);
+									if (cityObj.length > 0) {
+										//ajax_get_region_info(); //20170413
+										//ajax_get_region_info_map('zh');
+										build_breadcrumb();
+										setup_content();
+									} else {
+										console.log('nothing');
+									}
+								}
+								//ajaxRefreshHandling(ajax_get_city_info, "ajaxCity", 0, param);
+							} else {
+								//ajaxRefreshHandling(ajax_get_city_info, "ajaxCity", 1, param);
+							}
+						},
+						error: function () {
+							//ajaxRefreshHandling(ajax_get_city_info, "ajaxCity", 1, param);
+						}
+					});
+				
+				
+            }
+
+            //Use member id to get WMO Member info from JSON file
+            function ajax_get_member_info(memId) {
+                $.ajax({
+                    url: "../../zh/json/Country_zh.xml",
+                    type: "GET",
+                    dataType: "text",
+                    success: function (Jdata) {
+                        json_data = JSON.parse(Jdata);
+                        member_json_data = json_data;
+                        delete member_json_data.member['lang'];
+                        memberObj = getObjects(json_data, 'memId', memId);
+                        if (memberObj.length > 0) {
+                            //ajax_get_region_info();
+                            //setup_content();
+                            loadMyFavorites(true);
+                        } else {
+                            window.location.href = './error.html';
+                        }
+                        var memberCityObj = getObjects(json_data, 'memId', memId);
+
+                        if (memberCityObj[0].city.length > 0) {
+                            if ($('.city_map').is(':visible') && $('.city_map').height() !=0) {
+								                            }
+                        } else {
+                            console.log("ERROR!!!");
+                        }
+                    },
+                    error: function () {
+                        console.log("ERROR!!!");
+                    }
+                });
+            }
+
+            //Map the WMO member ID by using Pub5 Country Code from JSON file
+            function ajax_map_member_id(key) {
+                $.ajax({
+                    url: "../json/Pub5CountryCode.xml",
+                    type: "GET",
+                    dataType: "text",
+                    success: function (Jdata) {
+                        json_data = JSON.parse(Jdata);
+                        var mappingObj = getObjects(json_data, 'countryCode', key);
+                        if (mappingObj.length > 0) {
+                            ajax_get_member_info(mappingObj[0].memId);
+                        } else {
+                            window.location.href = './error.html';
+                        }
+                    },
+                    error: function () {
+                        console.log("ERROR!!!");
+                    }
+                });
+            }
+
+            $(document).ready(function () {
+				//$('.beta_box').css('display','none');
+			//	$('.beta_box_sun').css('display','none');
+				beta_msg();
+				$('.beta_msg').css('display','none');
+				$('.beta_msg_sun').css('display','block');
+				//display beta message 20170419
+				
+				load_ecmwf_city();
+				
+				if (pageLang == 'de'){
+					$('.city_cond_header').css('padding-left','0px');
+				}
+			
+				
+				ajax_get_region_info_map('zh');
+				ajax_get_member_info_sitemap('zh');
+				generateSiteMap('regions');
+				
+			  if (getCookie('myFavorite_e') == null || getCookie('myFavorite_e') == "") {
+					
+					$('.fav_item_mask').html('<div class="home_add_fav"><a href="./selection.html">添加您自己的城市</a></div>');
+					$( '.fav_item_mask' ).addClass( "fav_item_mask_add_button" );
+                }
+
+
+                /*20161222*/
+                $('.txt_share').one('click', function () { //.one('click') prevent multi run after multi click
+                    $('.share_btn_item').stop().slideToggle();
+                    return false;
+                });
+				 $('.ico_share').one('click', function () { //.one('click') prevent multi run after multi click
+                    $('.share_btn_item').stop().slideToggle();
+                    return false;
+                });
+				
+                /*20161222*/
+
+                $('.city_local_time').css('display', 'none');
+                $('.social-network-small').html($('.social-network').clone().contents());
+                $('.header-menu-btn a').click(function () {
+                    if ($('.header-menu').is(':visible')) {
+                        $('.header-menu').slideUp(500, function () {
+                            $('.header-menu-btn a').children('img').attr('src', '../images/arrow_down.png');
+                        });
+                    } else {
+                        $('.header-menu').slideDown(500, function () {
+                            $('.header-menu-btn a').children('img').attr('src', '../images/arrow_up.png');
+                        });
+                    }
+                });
+                $('.main-menu-btn').click(function () {
+                    if ($('.mainmenu').is(':visible')) {
+                        $('.mainmenu').slideUp(500, function () {});
+                    } else {
+                        $('.mainmenu').slideDown(500, function () {});
+                    }
+                });
+
+                ajax_get_present_info('');
+
+                $(window).resize(function () {
+                    updateFavBar();
+                });
+
+                if (isCookieEnabled && getCookie('fontsize_e') != null) {
+                    changeFontSize(getCookie('fontsize_e'));
+                } else {
+					var fsv = '0';
+                    changeFontSize(fsv);
+                }
+                setupSearchBox();
+
+                if ((/^([1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9][0-9])$/.test(param_val))) {
+                    ajax_get_city_info(param_val, '');
+
+                } else {
+                    if (!GetURLParameter('name'))
+                        window.location.href = './error.html';
+                }
+				
+				let t4 = setTimeout(function(){
+					auto_adjust_height_map();
+					clearTimeout(t4);
+				}, 2500);
+				
+				let t5 = setTimeout(function(){
+					initMap();
+					clearTimeout(t5);
+				}, 1200);
+            });
+			
+			
+		
+			function auto_adjust_height_map() {
+				climateTable_height = $('#climateTable').height();
+				
+				 var climatological_area_height = $("#climatological_area_container").height();
+			  
+				var city_map = $("#city_map_container").height();
+			   
+				if (city_map < climatological_area_height) {
+					
+					//city_openstreetmap_height = $("#city_openstreetmap_canvas").height(); 
+					city_map_height = $("#viewDiv").height(); // 20190710
+			
+					different_height = climatological_area_height - city_map;
+					//$('#city_openstreetmap_canvas').css('height', city_openstreetmap_height + different_height + 1 + 'px');
+					$('#viewDiv').css('height', city_map_height + different_height + 1 + 'px'); // 20190710
+				}
+			}
+
+
+
+        </script>
+    </head>
+    <body>
+        <div class="wrapper">
+
+			<script>
+$( document ).ready(function() {
+	$( ".prettyfied-select-box .arrow-up" ).hide();
+	change_current_lang_msg();
+});
+
+
+function change_current_lang_msg(){
+			
+				if(pageLang=='ar'){
+					$('.prettyfied-select-box .current_lang').html('‏العربية‏');
+				}
+				
+				if(pageLang=='en'){
+				$('.prettyfied-select-box .current_lang').html('English');
+				}
+				
+				if(pageLang=='tc'){
+					$('.prettyfied-select-box .current_lang').html('繁體中文');
+				}
+				
+				if(pageLang=='zh'){
+					$('.prettyfied-select-box .current_lang').html('简体中文');
+				}
+				
+				if(pageLang=='fr'){
+					$('.prettyfied-select-box .current_lang').html('Français');
+				}
+				
+				if(pageLang=='de'){
+					$('.prettyfied-select-box .current_lang').html('Deutsch');
+				}
+				
+				if(pageLang=='it'){
+					$('.prettyfied-select-box .current_lang').html('Italiano');
+				}
+				
+				if(pageLang=='kr'){
+					$('.prettyfied-select-box .current_lang').html('한국어');
+				}
+				
+				if(pageLang=='pl'){
+					$('.prettyfied-select-box .current_lang').html('Polski');
+				}
+				
+				if(pageLang=='pt'){
+					$('.prettyfied-select-box .current_lang').html('Português');
+					if(window.innerWidth < 800){
+					$('.website-t1').css('font-size','16px');
+					}
+				}
+				
+				if(pageLang=='ru'){
+					$('.prettyfied-select-box .current_lang').html('Русский');
+				}
+				
+				if(pageLang=='es'){
+					$('.prettyfied-select-box .current_lang').html('Español');
+				}
+}
+
+</script>
+<div class="row header-menu">  
+    <div class="col-12 social-network">
+        <a class="sn1" href="http://www.facebook.com/pages/World-Meteorological-Organization/71741701887" target="_blank" rel="noopener noreferrer" title="Facebook"></a>
+        <a class="sn2" href="http://twitter.com/WMO" target="_blank" rel="noopener noreferrer" title="Twitter"></a>
+        <a class="sn3" href="https://www.flickr.com/photos/worldmeteorologicalorganization/sets/" target="_blank" rel="noopener noreferrer" title="Flickr"></a>
+        <a class="sn4" href="https://www.instagram.com/wmo_omm/" target="_blank" rel="noopener noreferrer" title="Instagram"></a>
+        <a class="sn5" href="https://www.youtube.com/worldmetorg" target="_blank" rel="noopener noreferrer" title="YouTube"></a>
+        <a class="sn6" href="https://vimeo.com/wmo" target="_blank" rel="noopener noreferrer" title="Vimeo"></a>
+    </div>
+</div>
+
+<div class="row header_container" id="header_main">
+
+ 
+        <div class="header-menu-right">
+
+			<div id="lang_link" class="lang_menu">
+                           <div id="lang_link1">
+					<div class="prettyfied-select-box"><a><span class="current_lang">English</span><span class="arrow-down" alt="Expand"></span><span class="arrow-up" alt="Collapse"></span></a></div>
+					<script type="text/javascript">document.write("<script type='text/javascript' src='"+ location.protocol +"//worldweather.wmo.int/scripts/domain1.js' charset='utf-8'><\/scr" + "ipt>");</script>
+					<script type="text/javascript">
+
+
+					$('.prettyfied-select-box a').click(function() {
+							
+						if (!$('#lang_link1 ul').is(':visible')) {
+							$( ".arrow-down" ).hide();
+							$( ".arrow-up" ).show();
+							$('#lang_link1 ul').slideDown(500, function() {});
+						} else {
+							$('#lang_link1 ul').slideUp(500, function() {});
+							$( ".arrow-down" ).show();
+							$( ".arrow-up" ).hide();
+						}
+					});
+					</script>
+				</div>
+				<!--<script type="text/javascript">document.write("<script type='text/javascript' src='"+ location.protocol +"//worldweather.wmo.int/scripts/domain.js' charset='utf-8'><\/scr" + "ipt>");</script>-->	
+            			</div>
+        </div>
+		
+	
+	<table>
+	<tr>
+		<td>
+		<div class="header_m_main_menu">
+		 	<a class="main-menu-btn" href="javascript:void(0);" title="Main menu">
+                <span class="spanline"></span>
+                <span class="spanline"></span>
+                <span class="spanline"></span>
+            </a>
+		
+		</div>
+	
+		</td>
+		
+		<td>
+		<div class="logo-area">
+		<img style="height:77px;" src="../images/logo_wmo.png" alt="" />
+		</div>
+	
+		</td>
+		
+		<td>
+			<div class="head_img_container">
+			<div class="header_msg">	
+			世界气象组织			</div>	
+			
+			<div class="header_msg_small">
+			天气 · 气候 · 水			</div>
+			</div>	
+		</td>
+		
+		
+		<td class="header_banner">
+			<span class="website-t">
+			 			<a href="./home.html">	<span class="website-t1">世界天气信息服务网</span><br /><span class="website-t2">官方预报</span></a>
+			</span>
+		</td>
+		
+		<td class="social_menu">
+			<div class="row header-menu-btn">
+			<a href="javascript:void(0);"><img src="../images/arrow_down.png" alt="Option menu"></a>
+			</div>
+		</td>
+
+	</tr>
+
+	</table>
+		
+	
+</div>
+
+<div class="row main-menu">
+<a name="site_top"></a>
+    <ul class="mainmenu">
+
+        <li><a href="./home.html" onclick="reset_map_cookie();">首页</a></li>
+
+        <li><a href="myfavourites.html">个人化</a></li>
+
+        <li><a href="whatsnew.html">最新消息</a></li>
+
+        <li>
+            <a href="javascript:void(0);" onclick="triggerSubMenu('menu1');">相关链接</a>
+            <div style="position:relative;">
+                <div class="submenu" id="menu1">
+                    <ul>
+                       
+                        <li><a href="http://dcpc.worldweather.org/" target="_blank" rel="noopener noreferrer">进阶搜寻</a></li>
+                        <li><a href="https://severeweather.wmo.int/TCFW/" target="_blank" rel="noopener noreferrer">热带气旋预报员网 (只提供英文)</a></li>
+                        <li><a href="http://wrd.mgm.gov.tr/default.aspx?l=en" target="_blank" rel="noopener noreferrer">世界气象组织雷达数据库 (只提供英文)</a></li>
+                        <li><a href="http://www.droughtmanagement.info/" target="_blank" rel="noopener noreferrer">综合旱灾管理计划 (只提供英文)</a></li>
+                        <li><a href="http://www.wamis.org/" target="_blank" rel="noopener noreferrer">世界农业气象信息服务 (只提供英文)</a></li>
+                        <li><a href="http://wmo.asu.edu/" target="_blank" rel="noopener noreferrer">世界天气/气候极端存档 (只提供英文)</a></li>
+                        <li><a href="https://www.wmo.int/cpdb/" target="_blank" rel="noopener noreferrer">世界气象组织国家概况数据库 (只提供英文)</a></li>
+						<li><a href="https://alertingauthority.wmo.int/" target="_blank" rel="noopener noreferrer">Register of Alerting Authorities</a></li>
+                    </ul>
+                </div>
+            </div>
+		</li>
+		
+        
+		
+		<li><a href="https://severeweather.wmo.int/" target="_blank" rel="noopener noreferrer">恶劣天气</a></li>
+		<li><a href="https://cloudatlas.wmo.int/zh-hans/home.html" target="_blank" rel="noopener noreferrer">国际云图</a></li>
+		<li>
+            <a href="javascript:void(0);" onclick="triggerSubMenu('menu2');">关于我们</a>
+            <div style="position:relative;">
+                <div class="submenu" id="menu2">
+                    <ul>
+                        <li><a href="pilot.html">关于此网站</a></li>
+                        <li><a href="members.html">成员列表</a></li>
+                        <li><a href="wxicons.html">天气图标</a></li>
+                       
+                    </ul>
+                </div>
+            </div>
+        </li>
+		<li><a href="apps.html">应用程式</a></li>
+	
+        <li>
+            <a href="javascript:void(0);" onclick="triggerSubMenu('menu3');">支援</a>
+            <div style="position:relative;">
+                <div class="submenu" id="menu3">
+                    <ul>
+                        <li><a href="settings.html">设定</a></li>					
+                        <li><a href="note.html">用户需知</a></li>
+						                        <li><a href="dataguide.html">下载</a></li>
+																		
+                    </ul>
+                </div>
+            </div>
+		</li>
+		
+    </ul>
+    <div class="social-network-small"></div>
+
+</div>
+		
+            <div class="row">
+	<div class="col-12 breadcrumb">
+		<ul id="breadcrumb"><li><a href="./home.html" onclick="reset_map_cookie();">首页</a> &gt;</li></ul>
+	</div>
+</div>			
+            <div class="row shortcut_n_searchbox" style="position:relative;">
+	<div style="width:100%;height:44px;background-color:#20799b;">
+		<a id="prev_item_btn" href="javascript:void(0);" onclick="goPrevItem();" title="上一个"><span></span></a>
+		<div class="fav_item_mask"><ul id="fav_item_container"></ul></div>
+		<a id="next_item_btn" href="javascript:void(0);" onclick="goNextItem();"  title="下一个"><span></span></a>
+		<a id="btn_plus_add_city" href="./selection.html" title="添加城市"><span></span></a>
+		<div id="search_box"><div id="top_searchcontainer"><form name="searchForm" id="searchForm" method="get" onsubmit="return searchFormSubmit('searchForm');" action=""><input type="text" class="top_searchbox ui-autocomplete-input" name="query" id="q_search" placeholder="请输入城市/国家/地区名称" title="请输入城市/国家/地区名称" autocomplete="off"><span role="status" aria-live="polite" class="ui-helper-hidden-accessible"></span><input type="hidden" name="page" value="city"><input name="submit" type="submit" class="top_searchbox_submit" value="" title="搜寻"></form></div></div>
+	</div>
+</div>
+
+            <div class="row" style="position: relative; background-color: #074171;">
+                <div class="col-10 m_city_name"></div>
+                <div class="col-2 city_share"><a href="javascript:share_box_control();"><span class="ico_share"></span><span class="txt_share">分享</span></a></div>
+                <div id="share_box_home" class="col-m-12 col-4 share_box_container" style="text-align: center; float:right;">
+
+                    <div class="share_btn_item" style="display: none;">
+                        <div id="shareItem" class="share_content">
+
+                            <div class="share_icon_button" >
+                                <a href="javascript:;" onclick="shareFacebook('city');"  target="_blank" title="在 Facebook 分享此天气预报"><span class="img_set_share share_icon_set btn_facebook"></span></a>
+                                <a href="javascript:;" onclick="shareTwitter('city');" target="_blank" title="在 Twitter 分享此天气预报"><span class="img_set_share share_icon_set btn_twitter"></span></a>
+                                <a href="javascript:;" onclick="shareWeibo('city');" target="_blank" title="在 Weibo 分享此天气预报"><span class="img_set_share share_icon_set btn_weibo"></span></a>
+                                <a href="javascript:;" onclick="shareLinkedIn('city');" target="_blank" title="在 linkedin 分享此天气预报"><span class="img_set_share share_icon_set btn_linkedin"></span></a>
+                                <a href="javascript:;" onclick="shareGooglePlus('city');" target="_blank" title="在 googleplus 分享此天气预报"><span class="img_set_share share_icon_set btn_googleplus"></span></a>
+                                <a href="javascript:;" onclick="emailFriend('city');" target="_blank" title="用电邮分享此天气预报"><span class="img_set_share share_icon_set btn_email"></span></a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-5 city_left_side">
+
+                    <div class="col-12 city_name"></div>
+                    <div class="add_myfav"></div>
+
+                    <div class="col-12 city_country"><a href="./country.html?countryCode=185" class="city_place_name_member"></a></div>
+                    <div class="col-12 city_local_time"><span id="localTime"></span></div>
+                    <div class="col-12 city_warning"></div>
+                    <div class="col-12 city_currwx_box">
+                        <div class="col-4 col-m-3 city_wxicon_block">
+                            <span id="currwx_icon" class="weather_icon1" style="display: block;"></span>
+                        </div>
+                        <div class="col-4 col-m-3 city_temp_block" style="display: block;">
+                            <div class="ico_present_temp"></div>
+                            <div class="present_temp_value"></div>
+                            <div class="present_temp_unit"></div>
+                        </div>
+                        <div class="col-4 col-m-3 city_rh_block" style="display: block;">
+                            <div class="ico_present_rh"></div>
+                            <div class="present_rh_value"></div>
+                            <div class="present_rh_unit"></div>
+                        </div>
+                        <div class="col-8 col-m-3 city_wind_block" style="display: block;">
+                            <div class="ico_present_wind"></div>
+                            <div class="present_wind_value"></div>
+                        </div>
+						
+                    </div>
+					<div class="col-4 col-m-1 beta_msg" onclick="beta_box(2)"></div>
+					<div class="beta_box" alt="beta_message_button"></div>
+                    <div class="col-12 city_currwx_issuetime"></div>
+					
+                    <div class="sun_n_moon_block1"></div>
+                    
+                    <div class="col-12 wxphoto">wxphoto</div>
+                    <div class="col-12 country_logo">
+                        <div id="logo"></div>
+                        <div id="website"></div>
+                    </div>
+                </div>
+			
+                <div class="col-7 city_right_side">
+	
+                    <div id="no_weather_forecast" class="col-12"></div>
+                    <div class="col-12 city_fc_block">
+                        <div class="city_forecast_day_object_header">
+                            <div class="date_header">日期</div>
+                            <div class="temp_header">温度<span class="temp_current_unit"></span></div>
+							<div class="city_cond_header">状况</div>
+                            <div class="desc_header">描述</div>
+                        </div>
+                        <div class="city_fc_block_mask">
+                            <div class="city_container">
+                            </div>
+                            <div style="clear:both;"></div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-m-12 sun_n_moon_block sun_block_mobile" style="position: relative;">
+                        <div class="col-6 col-m-6 sun_block">
+                            <div class="sunrise_datetime">日出<br><span></span></div>
+                            <div class="sunset_datetime">日落<br><span></span></div>
+                            <div class="sun_img"><span id="sunset_img" class="sunmoonimg sunset" style="display: block;"></span></div>
+                        </div>
+                        <div class="col-6 col-m-6 moon_block">
+                            <div class="moonrise_datetime"><br><span></span></div>
+                            <div class="moonset_datetime"><br><span></span></div>
+                            <div class="moon_img"><span id="moonset_img" class="sunmoonimg moonset8" style="display: block;"></span></div>
+                        </div>
+                    </div>
+                    <div class="country_logo1"></div>
+                    <div class="col-12 city_forecast_issuetime"></div>
+					<div class="col-12 model_run_remark"></div>
+                </div>
+
+
+            </div>
+
+
+
+            <div class="row">
+                <div class="city_map" id="city_map_container">
+
+                    					<div id="viewDiv"></div>
+					<div style="background-color: #656565;line-height: 1em; width:98.5%" class="esri-component esri-attribution esri-widget city_map_instruction"><span style="color:#d1d1d1;font-size:11px;padding:5px" class="city_map_instruction">The boundaries and names shown and the designations used do not imply official endorsement or acceptance by WMO or the United Nations.</span></div>
+                    <div class="city_map_instruction">点击地图上的城市可看相关的天气预报及气候资料。</div>
+					
+                    <div class="col-12 col-m-12 sun_status">
+					<div class="sun_time sun_date col-12 col-m-12 col-s-12"></div>
+                        <div class="col-6 col-m-6 col-s-6">
+						<div class="col-4 col-m-4 col-s-12"><img alt="sunrise icon" src="../images/sunrise.png"></div> 
+                            <div class="col-8 col-m-8 col-s-12 sun_container">
+                                <span>
+                                    <div class="row sun_content">
+                                        <div class="sun_title col-12 col-m-12 col-s-12">日出</div>
+                                        <div class="sun_time sunrise_time col-12 col-m-12 col-s-12"></div>
+										
+                                    </div>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-m-6 col-s-6">
+						<div class="col-4 col-m-4 col-s-12"><img alt="sunset icon" src="../images/sunset.png"></div> 
+                            <div class="col-8 col-m-8 col-s-12 sun_container">
+                                <div class="row sun_content">
+                                    <div class="sun_title col-12 col-m-12 col-s-12">日落</div>
+                                    <div class="sun_time sunset_time col-12 col-m-12 col-s-12"></div>
+                                </div>
+                            </div>
+                        </div>	
+						<div class="col-4 col-m-1 beta_msg beta_msg_sun" onclick="beta_box(1)"></div>
+						<div class="beta_box_sun" alt="beta_message_sunrise_button"></div>
+                    </div>
+					
+                </div>
+
+                <div class="climatological_area" id="climatological_area_container">
+                    <div class="col-12" id="climateContainer"></div>
+                    <div class="climateTable_container">
+                        <div class="col-12" id="climateTable"></div>
+                    </div>
+                    <div class="col-12" id="city_climate_remark" align="left"></div>
+                </div>
+            </div>
+
+
+			<div class="row" id="remarks"></div>
+
+			
+
+
+<div class="row footer-area">
+<div class="col-12 host-info">
+		该网站中文版由<a href='http://www.nmc.gov.cn/' target='_blank' rel='noopener noreferrer'>中国气象局中央气象台</a>制作和维护。</div>
+	
+	<div class="col-12 site_map_footer">
+		<div class="row">
+			<div class="row col-12 col-m-12 h1">	
+				<div class="col-4 col-m-4 col-s-12">
+					<div class="footer_title">首页</div>
+					<div class="sitemap_content">
+						<ul class="sitemap_item">
+							<li><a href="home.html">首页</a></li>
+							<li><a href="apps.html">应用程式</a></li>
+						</ul>
+					</div>
+				</div>
+				<div class="col-4 col-m-4 col-s-12">
+					<div class="footer_title">个人化</div>
+					<div class="sitemap_content">
+						<ul class="sitemap_item">
+							<li><a href="myfavourites.html">个人化</a></li>
+						</ul>
+					</div>
+				</div>
+				<div class="col-4 col-m-4 col-s-12">
+					<div class="footer_title">最新消息</div>
+					<div class="sitemap_content">
+						<ul class="sitemap_item">
+							<li><a href="whatsnew.html">最新消息</a></li>
+						</ul>
+					</div>
+				</div>
+			</div>
+			<div class="row col-12 col-m-12">	
+				<div class="col-4 col-m-4 col-s-12">
+					<div class="footer_title">相关链接</div>
+					<div class="sitemap_content">
+						<ul class="sitemap_item">
+							<li><a href="https://severeweather.wmo.int/" target="_blank" rel="noopener noreferrer">恶劣天气</a></li>
+							<li><a href="http://dcpc.worldweather.org/" target="_blank" rel="noopener noreferrer">进阶搜寻</a></li>
+							<li><a href="https://severeweather.wmo.int/TCFW/" target="_blank" rel="noopener noreferrer">热带气旋预报员网 (只提供英文)</a></li>
+							<li><a href="http://wrd.mgm.gov.tr/default.aspx?l=en" target="_blank" rel="noopener noreferrer">世界气象组织雷达数据库 (只提供英文)</a></li>
+							<li><a href="http://www.droughtmanagement.info/" target="_blank" rel="noopener noreferrer">综合旱灾管理计划 (只提供英文)</a></li>
+							<li><a href="http://www.wamis.org/" target="_blank" rel="noopener noreferrer">世界农业气象信息服务 (只提供英文)</a></li>
+							<li><a href="http://wmo.asu.edu/" target="_blank" rel="noopener noreferrer">世界天气/气候极端存档 (只提供英文)</a></li>
+							<li><a href="https://www.wmo.int/cpdb/" target="_blank" rel="noopener noreferrer">世界气象组织国家概况数据库 (只提供英文)</a></li>
+							<li><a href="https://cloudatlas.wmo.int/zh-hans/home.html" target="_blank" rel="noopener noreferrer">国际云图</a></li>							
+							<li><a href="https://alertingauthority.wmo.int/" target="_blank" rel="noopener noreferrer">Register of Alerting Authorities</a></li>
+						</ul>
+					</div>
+				</div>
+				<div class="col-4 col-m-4 col-s-12">
+					<div class="footer_title">关于我们</div>
+					<div class="sitemap_content">
+						<ul class="sitemap_item">
+							<li><a href="pilot.html">关于此网站</a></li>
+							<li><a href="members.html">成员列表</a></li>
+							<li><a href="wxicons.html">天气图标</a></li>
+							
+						</ul>
+					</div>
+				</div>
+				<div class="col-4 col-m-4 col-s-12">
+					<div class="footer_title">支援</div>
+					<div class="sitemap_content">
+						<ul class="sitemap_item">
+							<li><a href="mailto:webmaster@worldweather.org">联系我们</a></li>
+							<li><a href="note.html">用户需知</a></li>
+							<li><a href="settings.html">设定</a></li>
+													</ul>
+					</div>
+				</div>
+			</div>
+			<div class="row col-12 col-m-12">
+				<div class="col-12 col-m-12 col-s-12">
+					<div id="rccSiteMap"></div>
+				</div>
+			</div>
+		</div>
+				<div class="col-9 footer-left">
+			&#169; 2020 | <a href="./privacy.html">隐私政策</a> | <a href="mailto:webmaster@worldweather.org">联系我们</a> | <a href="./disclaimer.html">声明</a> | <a href="./note.html">用户需知</a> | <a href="http://www.wmo.int/pages/prog/amp/pwsp/" target="_blank" rel="noopener noreferrer">世界气象组织外联网</a> | 京ICP备05055842号-1 | <a class="wcag-logo" href="http://www.w3.org/WAI/WCAG2AA-Conformance" target="_blank" rel="noopener noreferrer" title="遵守2A级无障碍图示，万维网联盟（W3C）- 无障碍网页倡议（WAI） Web Content Accessibility Guidelines 2.0"></a>
+		</div>
+		
+		<div class="col-3 footer-right">
+						<div id="footer_last_update"></div>
+			<script type="text/javascript">
+				$('#footer_last_update').html(moment('2026-02-25').locale('zh-cn').format('[更新在]ll'));
+			</script>
+		</div>
+		
+	</div>
+	
+
+</div>
+<a id="floating_back_to_top" style="display: block;" href="#site_top">返回頁首</a>
+        </div>
+    </body>
+</html>

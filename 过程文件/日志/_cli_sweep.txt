@@ -1,0 +1,532 @@
+==============================================================================
+[OK] 列出全部配置
+$ python wmo_climate.py --list-profiles
+退出码：0
+--- stdout ---
+可用配置：
+  default          默认配置：官方页面风格（日均最低/最高气温 + 降水柱），双轴
+  alt_bands        隔月底色：偶数月加深底色，用于快速对位读数
+  annual_table     表格增强：含年均/年合计列，转置布局，精度 1 位，附脚注
+  compact          紧凑小图：适合嵌入文档或批量出图
+  compare          多城市对比配置：默认对比日均气温，附范围内数值
+  compare_rain     多城市对比（降水）：柱状对比平均总降水，按年合计排序
+  fahrenheit       英制单位：气温 °F、降水 英寸
+  full             全元素：日均最低/最高/平均气温 + 降水柱 + 降水日数（第三轴）
+  minimal          极简：无标题、无图例、无网格、无轴标题，仅保留曲线与月份刻度
+  paper            学术论文：白底、无图例边框、左对齐标题、细线条、附数据来源
+  presentation     投屏演示：大画布、大字号、粗线条、带数据标签
+  rain_only        纯降水图：降水量柱 + 降水日数折线，单轴
+  seasonal         季节底色：按冬/春/夏/秋给月份加背景色带，并标注气温极值月
+  temp_only        纯气温图：只画气温（含日均气温），关闭降水轴
+  yellow_black     高对比配色：适合打印或投影环境光较亮时使用
+
+用法：--profile <名称>；未指定则使用 default。
+
+==============================================================================
+[OK] 查看默认配置
+$ python wmo_climate.py --show-config
+退出码：0
+--- stdout ---
+{
+  "profile_name": "default",
+  "profile_description": "默认配置：官方页面风格（日均最低/最高气温 + 降水柱），双轴",
+  "data": {
+    "lang": "zh",
+    "derive_mean_temp": true,
+    "temp_unit": "C",
+    "rain_unit": "mm",
+    "fill_missing": "gap",
+    "month_label_style": "1月",
+    "include_annual": false,
+    "auto_disable_empty_series": true
+  },
+  "fetch": {
+    "base_url": "https://worldweather.wmo.int",
+    "city_page_path": "{lang}/city.html?cityId={city_id}",
+    "data_path": "{lang}/json/{city_id}_{lang}.xml",
+    "city_index_path": "{lang}/json/Country_{lang}.xml",
+    "fetch_page_first": true,
+    "timeout": 30,
+    "retries": 4,
+    "backoff": 1.2,
+    "backoff_max": 15,
+    "verify_ssl": true,
+    "proxy": "",
+    "save_raw": false,
+    "raw_dir": "过程文件/中间产物/raw",
+    "headers": {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.9,*/*;q=0.8",
+      "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+      "Accept-Encoding": "identity",
+      "Connection": "keep-alive",
+      "Cache-Control": "no-cache",
+      "Pragma": "no-cache",
+      "Upgrade-Insecure-Requests": "1"
+    },
+    "cache": {
+      "enabled": true,
+      "ttl": 86400,
+      "dir": "过程文件/中间产物/cache"
+    }
+  },
+  "output": {
+    "out_dir": "output",
+    "name_template": "{city}_{city_id}_climate",
+    "compare_name_template": "{city_count}城对比_{metric}",
+    "table_formats": [
+      "csv",
+      "md",
+      "xlsx"
+    ],
+    "chart_formats": [
+      "png"
+    ],
+    "chart_dpi": 144,
+    "overwrite": "overwrite",
+    "csv_encoding": "utf-8-sig",
+    "log_level": "INFO"
+  },
+  "figure": {
+    "figsize": [
+      12.0,
+      6.0
+    ],
+    "dpi": 144,
+    "facecolor": "#ebf1f5",
+    "axes_facecolor": "auto",
+    "edgecolor": "none",
+    "layout": "tight",
+    "subplots_adjust": {
+      "left": null,
+      "right": null,
+      "top": null,
+      "bottom": null,
+      "hspace": null,
+      "wspace": null
+    },
+    "font_family": [
+      "Microsoft YaHei",
+      "SimHei",
+      "DejaVu Sans"
+    ],
+    "font_size": 11,
+    "font_weight": "normal",
+    "axes_unicode_minus": true,
+    "title": {
+      "show": true,
+      "text": "{city} 气候统计",
+      "fontsize": 16,
+      "color": "#2c3e50",
+      "fontweight": "bold",
+      "pad": 14,
+      "loc": "center"
+    },
+    "subtitle": {
+      "show": false,
+      "text": "{member} · {period}",
+      "fontsize": 10.5,
+      "color": "#596679",
+      "fontweight": "normal",
+      "pad": 6,
+      "loc": "center"
+    },
+    "legend": {
+      "show": true,
+      "loc": "upper center",
+      "bbox_to_anchor": [
+        0.5,
+        -0.12
+      ],
+      "ncol": 0,
+      "fontsize": 10,
+      "frameon": true,
+      "framealpha": 0.9,
+      "facecolor": "#ffffff",
+      "edgecolor": "#c9d3dd",
+      "title": "",
+      "markerscale": 1.0,
+      "columnspacing": 1.6,
+      "handlelength": 2.0,
+      "handletextpad": 0.6
+    },
+    "grid": {
+      "show": true,
+      "axis": "y",
+      "which": "major",
+      "color": "#c9d3dd",
+      "linestyle": "--",
+      "linewidth": 0.7,
+      "alpha": 0.75,
+      "zorder": 0
+    },
+    "background": {
+      "bands": {
+        "show": false,
+        "mode": "season",
+        "alternate_color": "#8fa8c0",
+        "alternate_alpha": 0.06,
+        "alpha": 0.07,
+        "seasons": [
+          {
+            "name": "冬",
+            "months": [
+              
+…（输出已截断）
+
+==============================================================================
+[OK] 查看 presentation 配置(节选)
+$ python wmo_climate.py --show-config --profile presentation
+退出码：0
+--- stdout ---
+{
+  "profile_name": "presentation",
+  "profile_description": "投屏演示：大画布、大字号、粗线条、带数据标签",
+  "data": {
+    "lang": "zh",
+    "derive_mean_temp": true,
+    "temp_unit": "C",
+    "rain_unit": "mm",
+    "fill_missing": "gap",
+    "month_label_style": "1月",
+    "include_annual": false,
+    "auto_disable_empty_series": true
+  },
+  "fetch": {
+    "base_url": "https://worldweather.wmo.int",
+    "city_page_path": "{lang}/city.html?cityId={city_id}",
+    "data_path": "{lang}/json/{city_id}_{lang}.xml",
+    "city_index_path": "{lang}/json/Country_{lang}.xml",
+    "fetch_page_first": true,
+    "timeout": 30,
+    "retries": 4,
+    "backoff": 1.2,
+    "backoff_max": 15,
+    "verify_ssl": true,
+    "proxy": "",
+    "save_raw": false,
+    "raw_dir": "过程文件/中间产物/raw",
+    "headers": {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.9,*/*;q=0.8",
+      "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+      "Accept-Encoding": "identity",
+      "Connection": "keep-alive",
+      "Cache-Control": "no-cache",
+      "Pragma": "no-cache",
+      "Upgrade-Insecure-Requests": "1"
+    },
+    "cache": {
+      "enabled": true,
+      "ttl": 86400,
+      "dir": "过程文件/中间产物/cache"
+    }
+  },
+  "output": {
+    "out_dir": "output",
+    "name_template": "{city}_{city_id}_climate",
+    "compare_name_template": "{city_count}城对比_{metric}",
+    "table_formats": [
+      "csv",
+      "md",
+      "xlsx"
+    ],
+    "chart_formats": [
+      "png",
+      "pdf"
+    ],
+    "chart_dpi": 160,
+    "overwrite": "overwrite",
+    "csv_encoding": "utf-8-sig",
+    "log_level": "INFO"
+  },
+  "figure": {
+    "figsize": [
+      16.0,
+      9.0
+    ],
+    "dpi": 144,
+    "facecolor": "#ebf1f5",
+    "axes_facecolor": "auto",
+    "edgecolor": "none",
+    "layout": "tight",
+    "subplots_adjust": {
+      "left": null,
+      "right": null,
+      "top": null,
+      "bottom": null,
+      "hspace": null,
+      "wspace": null
+    },
+    "font_family": [
+      "Microsoft YaHei",
+      "SimHei",
+      "DejaVu Sans"
+    ],
+    "font_size": 15,
+    "font_weight": "normal",
+    "axes_unicode_minus": true,
+    "title": {
+      "show": true,
+      "text": "{city} 气候统计",
+      "fontsize": 24,
+      "color": "#2c3e50",
+      "fontweight": "bold",
+      "pad": 20,
+      "loc": "center"
+    },
+    "subtitle": {
+      "show": true,
+      "text": "{member} · 统计时段 {period}",
+      "fontsize": 15,
+      "color": "#596679",
+      "fontweight": "normal",
+      "pad": 6,
+      "loc": "center"
+    },
+    "legend": {
+      "show": true,
+      "loc": "upper center",
+      "bbox_to_anchor": [
+        0.5,
+        -0.1
+      ],
+      "ncol": 0,
+      "fontsize": 15,
+      "frameon": true,
+      "framealpha": 0.9,
+      "facecolor": "#ffffff",
+      "edgecolor": "#c9d3dd",
+      "title": "",
+      "markerscale": 1.5,
+      "columnspacing": 1.6,
+      "handlelength": 2.0,
+      "handletextpad": 0.6
+    },
+    "grid": {
+      "show": true,
+      "axis": "y",
+      "which": "major",
+      "color": "#c9d3dd",
+      "linestyle": "--",
+      "linewidth": 1.0,
+      "alpha": 0.85,
+      "zorder": 0
+    },
+    "background": {
+      "bands": {
+        "show": false,
+        "mode": "season",
+        "alternate_color": "#8fa8c0",
+        "alternate_alpha": 0.06,
+        "alpha": 0.07,
+        "seasons": [
+          {
+            "name": "冬",
+            "months": [
+    
+…（输出已截断）
+
+==============================================================================
+[OK] 导出全量配置模板
+$ python wmo_climate.py --init-profile my_style
+退出码：0
+--- stdout ---
+已导出全量配置模板：D:\workspace\DrawClimateChart\config\my_style.json
+
+==============================================================================
+[OK] 搜索城市名
+$ python wmo_climate.py --search 北京 --limit 5
+退出码：0
+--- stdout ---
+cityId  城市                 国家/地区          坐标
+     237  北京                 中国             39.93, 116.28
+
+==============================================================================
+[OK] 按国家列城市
+$ python wmo_climate.py --list-cities --country 中国香港 --limit 5
+退出码：0
+--- stdout ---
+cityId  城市                 国家/地区          坐标
+       1  香港                 中国香港           22.30, 114.17
+
+==============================================================================
+[OK] 城市名反查并出图
+$ python wmo_climate.py --city 北京 --out-dir output/cli_sweep/name_lookup
+退出码：0
+--- stdout ---
+[INFO   ] 「北京」→ cityId 237（北京，中国）
+[INFO   ] 开始处理 1 个城市，配置：default（默认配置：官方页面风格（日均最低/最高气温 + 降水柱），双轴）
+[INFO   ] 数据源未提供平均气温，已按 (日均最高 + 日均最低) / 2 派生
+[INFO   ] 北京（237）完成：3 个表格，1 张图
+[INFO   ] 请求统计：共 0 次请求，其中重试 0 次
+成功 1 个，失败 0 个
+  [成功] 北京（237）：3 个表格，1 张图
+
+输出目录：D:\workspace\DrawClimateChart\output\cli_sweep\name_lookup
+
+==============================================================================
+[OK] 批量多城市(含非法ID)
+$ python wmo_climate.py --city-id 237 --city-id 1 --city-id 999999 --out-dir output/cli_sweep/batch
+退出码：1
+--- stdout ---
+[INFO   ] 开始处理 3 个城市，配置：default（默认配置：官方页面风格（日均最低/最高气温 + 降水柱），双轴）
+[INFO   ] 数据源未提供平均气温，已按 (日均最高 + 日均最低) / 2 派生
+[INFO   ] 北京（237）完成：3 个表格，1 张图
+[INFO   ] 数据源未提供平均气温，已按 (日均最高 + 日均最低) / 2 派生
+[INFO   ] 香港（1）完成：3 个表格，1 张图
+[ERROR  ] cityId 999999 取数失败：资源不存在（HTTP 404）：https://worldweather.wmo.int/zh/json/999999_zh.xml
+[INFO   ] 请求统计：共 3 次请求，其中重试 0 次
+成功 2 个，失败 1 个
+  [成功] 北京（237）：3 个表格，1 张图
+  [成功] 香港（1）：3 个表格，1 张图
+  [失败] cityId 999999：资源不存在（HTTP 404）：https://worldweather.wmo.int/zh/json/999999_zh.xml
+
+输出目录：D:\workspace\DrawClimateChart\output\cli_sweep\batch
+
+==============================================================================
+[OK] 多城市对比
+$ python wmo_climate.py --compare 北京 --compare 1 --compare 156 --profile compare --out-dir output/cli_sweep/compare
+退出码：0
+--- stdout ---
+[INFO   ] 「北京」→ cityId 237（北京，中国）
+[INFO   ] 开始多城市对比，共 3 个城市，配置：compare（多城市对比配置：默认对比日均气温，附范围内数值）
+[INFO   ] 数据源未提供平均气温，已按 (日均最高 + 日均最低) / 2 派生
+[INFO   ] 数据源未提供平均气温，已按 (日均最高 + 日均最低) / 2 派生
+[INFO   ] 数据源未提供平均气温，已按 (日均最高 + 日均最低) / 2 派生
+[INFO   ] 对比图已生成：1 张
+成功 3 个，失败 0 个
+  [成功] 北京（237）：0 个表格，0 张图
+  [成功] 香港（1）：0 个表格，0 张图
+  [成功] 澳门（156）：0 个表格，0 张图
+对比图：
+  D:\workspace\DrawClimateChart\output\cli_sweep\compare\3城对比_meanTemp.png
+
+==============================================================================
+[OK] 对比-降水柱
+$ python wmo_climate.py --compare 237 --compare 1 --compare 156 --profile compare_rain --out-dir output/cli_sweep/compare_rain
+退出码：0
+--- stdout ---
+[INFO   ] 开始多城市对比，共 3 个城市，配置：compare_rain（多城市对比（降水）：柱状对比平均总降水，按年合计排序）
+[INFO   ] 数据源未提供平均气温，已按 (日均最高 + 日均最低) / 2 派生
+[INFO   ] 数据源未提供平均气温，已按 (日均最高 + 日均最低) / 2 派生
+[INFO   ] 数据源未提供平均气温，已按 (日均最高 + 日均最低) / 2 派生
+[INFO   ] 对比图已生成：1 张
+成功 3 个，失败 0 个
+  [成功] 北京（237）：0 个表格，0 张图
+  [成功] 香港（1）：0 个表格，0 张图
+  [成功] 澳门（156）：0 个表格，0 张图
+对比图：
+  D:\workspace\DrawClimateChart\output\cli_sweep\compare_rain\3城对比_rainfall.png
+
+==============================================================================
+[OK] 临时覆盖参数
+$ python wmo_climate.py --city-id 237 --profile full --set series.rainfall.color=#ff7f0e --set figure.title.show=false --set figure.legend.loc=lower center --out-dir output/cli_sweep/set_override
+退出码：0
+--- stdout ---
+[INFO   ] 开始处理 1 个城市，配置：full（全元素：日均最低/最高/平均气温 + 降水柱 + 降水日数（第三轴））
+[INFO   ] 数据源未提供平均气温，已按 (日均最高 + 日均最低) / 2 派生
+[INFO   ] 北京（237）完成：3 个表格，1 张图
+[INFO   ] 请求统计：共 0 次请求，其中重试 0 次
+成功 1 个，失败 0 个
+  [成功] 北京（237）：3 个表格，1 张图
+
+输出目录：D:\workspace\DrawClimateChart\output\cli_sweep\set_override
+
+==============================================================================
+[OK] 英制单位
+$ python wmo_climate.py --city-id 1 --profile fahrenheit --out-dir output/cli_sweep/fahrenheit
+退出码：0
+--- stdout ---
+[INFO   ] 开始处理 1 个城市，配置：fahrenheit（英制单位：气温 °F、降水 英寸）
+[INFO   ] 数据源未提供平均气温，已按 (日均最高 + 日均最低) / 2 派生
+[INFO   ] 香港（1）完成：3 个表格，1 张图
+[INFO   ] 请求统计：共 0 次请求，其中重试 0 次
+成功 1 个，失败 0 个
+  [成功] 香港（1）：3 个表格，1 张图
+
+输出目录：D:\workspace\DrawClimateChart\output\cli_sweep\fahrenheit
+
+==============================================================================
+[OK] 仅表格不出图
+$ python wmo_climate.py --city-id 237 --no-chart --out-dir output/cli_sweep/no_chart
+退出码：0
+--- stdout ---
+[INFO   ] 开始处理 1 个城市，配置：default（默认配置：官方页面风格（日均最低/最高气温 + 降水柱），双轴）
+[INFO   ] 数据源未提供平均气温，已按 (日均最高 + 日均最低) / 2 派生
+[INFO   ] 北京（237）完成：3 个表格，0 张图
+[INFO   ] 请求统计：共 0 次请求，其中重试 0 次
+成功 1 个，失败 0 个
+  [成功] 北京（237）：3 个表格，0 张图
+
+输出目录：D:\workspace\DrawClimateChart\output\cli_sweep\no_chart
+
+==============================================================================
+[OK] 仅出图不出表
+$ python wmo_climate.py --city-id 237 --no-table --out-dir output/cli_sweep/no_table
+退出码：0
+--- stdout ---
+[INFO   ] 开始处理 1 个城市，配置：default（默认配置：官方页面风格（日均最低/最高气温 + 降水柱），双轴）
+[INFO   ] 数据源未提供平均气温，已按 (日均最高 + 日均最低) / 2 派生
+[INFO   ] 北京（237）完成：0 个表格，1 张图
+[INFO   ] 请求统计：共 0 次请求，其中重试 0 次
+成功 1 个，失败 0 个
+  [成功] 北京（237）：0 个表格，1 张图
+
+输出目录：D:\workspace\DrawClimateChart\output\cli_sweep\no_table
+
+==============================================================================
+[OK] 无气候数据城市
+$ python wmo_climate.py --city-id 2685 --out-dir output/cli_sweep/no_climate
+退出码：1
+--- stdout ---
+[INFO   ] 开始处理 1 个城市，配置：default（默认配置：官方页面风格（日均最低/最高气温 + 降水柱），双轴）
+[ERROR  ] cityId 2685 取数失败：cityId=2685（奥伦）没有气候月份数据
+[INFO   ] 请求统计：共 1 次请求，其中重试 0 次
+成功 0 个，失败 1 个
+  [失败] cityId 2685：cityId=2685（奥伦）没有气候月份数据
+
+输出目录：D:\workspace\DrawClimateChart\output\cli_sweep\no_climate
+
+==============================================================================
+[OK] 非法配置名
+$ python wmo_climate.py --city-id 237 --profile 不存在的配置
+退出码：2
+--- stdout ---
+配置错误：未找到配置「不存在的配置」。可用配置：default, alt_bands, annual_table, compact, compare, compare_rain, fahrenheit, full, minimal, paper, presentation, rain_only, seasonal, temp_only, yellow_black
+
+==============================================================================
+[OK] 非法单位
+$ python wmo_climate.py --city-id 237 --temp-unit K
+退出码：2
+--- stderr ---
+usage: wmo_climate [-h] [--city-id ID] [--city 名称] [--compare ID或名称]
+                   [--compare-metric 元素] [--profile 名称] [--profiles-file 路径]
+                   [--set 键=值] [--list-profiles] [--show-config]
+                   [--init-profile 名称] [--temp-unit {C,F}]
+                   [--rain-unit {mm,inch}] [--out-dir 目录] [--no-chart]
+                   [--no-table] [--refresh-cache] [--refresh-index]
+                   [--log-level {DEBUG,INFO,WARNING,ERROR}] [--search 关键词]
+                   [--list-cities] [--country 国家/地区] [--limit LIMIT]
+                   [--version]
+wmo_climate: error: argument --temp-unit: invalid choice: 'K' (choose from 'C', 'F')
+
+==============================================================================
+[OK] DEBUG 日志
+$ python wmo_climate.py --city-id 156 --log-level DEBUG --out-dir output/cli_sweep/debug_log
+退出码：0
+--- stdout ---
+[INFO   ] 开始处理 1 个城市，配置：default（默认配置：官方页面风格（日均最低/最高气温 + 降水柱），双轴）
+[DEBUG  ] 命中缓存：https://worldweather.wmo.int/zh/city.html?cityId=156
+[DEBUG  ] 页面校验通过：cityId=156 标题=世界天气信息服务网
+[DEBUG  ] 命中缓存：https://worldweather.wmo.int/zh/json/156_zh.xml
+[INFO   ] 数据源未提供平均气温，已按 (日均最高 + 日均最低) / 2 派生
+[INFO   ] 澳门（156）完成：3 个表格，1 张图
+[INFO   ] 请求统计：共 0 次请求，其中重试 0 次
+成功 1 个，失败 0 个
+  [成功] 澳门（156）：3 个表格，1 张图
+
+输出目录：D:\workspace\DrawClimateChart\output\cli_sweep\debug_log
+
+==============================================================================
+用例总数 18，异常用例 0 个

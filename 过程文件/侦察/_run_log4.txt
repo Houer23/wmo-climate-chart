@@ -1,0 +1,42 @@
+﻿member 鏁伴噺: 210
+member keys: ['city', 'countryLatitude', 'countryLongitude', 'logo', 'memId', 'memName', 'orgName', 'ra', 'shortMemName', 'szmlv', 'url', 'zoomlv']
+city 鏉＄洰瀛楁: ['cityId', 'cityLatitude', 'cityLongitude', 'cityName', 'climate', 'enName', 'forecast', 'isCapital', 'isDep', 'stationName', 'timeZone', 'tourismBoardName', 'tourismURL']
+鍏ㄧ悆鍩庡競鎬绘暟: 3629
+鍩庡競鏍蜂緥: [('闃垮皵鍙婂埄浜?, 242, '闃垮皵鍙婂皵'), ('闃垮皵鍙婂埄浜?, 1434, '瀹夌撼宸?), ('闃垮皵鍙婂埄浜?, 1361, '濂ュ叞'), ('闃垮皵鍙婂埄浜?, 1435, '璐濇矙灏?), ('闃垮皵鍙婂埄浜?, 1436, '姣旀柉鍗℃媺')]
+  [1007] 鏂拌タ浼埄浜?raintype=PPT rainunit=mm months=12 clino= datab= datae= tempb= tempe=
+  [631] 瀹夊ぇ鐣ョ渷妗戝痉璐?raintype=PPT rainunit=mm months=12 clino= datab=1971 datae=2000 tempb= tempe=
+  [2184] 甯屾椽 raintype= rainunit= months=12 clino= datab=1981 datae=2010 tempb= tempe=
+  [406] 璐¤开娓╄开 raintype=Rainfall rainunit=mm months=12 clino= datab=1991 datae=2010 tempb= tempe=
+  [2150] 瀵嗘敮閭?raintype=Rainfall rainunit=mm months=12 clino= datab=1981 datae=2010 tempb= tempe=
+  [500] 濉旈噷 raintype=Rainfall rainunit=mm months=12 clino= datab=1997 datae=2010 tempb= tempe=
+  [140] 鐝彔灏?raintype=Rainfall rainunit=mm months=12 clino= datab=1991 datae=2020 tempb= tempe=
+  [202] 鎷夌撼鍗＄┖娓?raintype=Rainfall rainunit=mm months=12 clino= datab=2002 datae=2011 tempb= tempe=
+  [432] 鍑仼鍗″ raintype=Rainfall rainunit=mm months=12 clino= datab=1930 datae=2002 tempb= tempe=
+  [2034] 鍦ｄ繚缃楋紝鏄庡凹鑻忚揪宸?raintype=Rainfall rainunit=mm months=12 clino= datab=1981 datae=2010 tempb= tempe=
+  [1824] 浣╁痉灏旀箹 raintype=Rainfall rainunit=mm months=12 clino= datab=1981 datae=2010 tempb= tempe=
+  [286] 搴撴媺绱㈠矝 raintype=PPT rainunit=mm months=12 clino=2001-12-31 datab=1961 datae=1990 tempb= tempe=
+  [951] 濂庡  raintype=Rainfall rainunit=mm months=12 clino= datab=1961 datae=1990 tempb= tempe=
+  [1729] 鍗㈡．鏍兼灄 raintype=Rainfall rainunit=mm months=12 clino= datab= datae= tempb= tempe=
+  [1823] 鍦ｇ帥涓?raintype=Rainfall rainunit=mm months=12 clino= datab= datae= tempb= tempe=
+  [1301] 鎵橀浄缈?raintype=Rainfall rainunit=mm months=12 clino= datab=1971 datae=2000 tempb= tempe=
+  [311] 鑾綏灏?raintype=Rainfall rainunit=mm months=12 clino= datab= datae= tempb= tempe=
+  [2222] 甯冩媺骞茶惃 raintype= rainunit= months=12 clino= datab=1971 datae=2000 tempb= tempe=
+  [1082] 鍦ｈ矾鏄撴柉 raintype=Rainfall rainunit=mm months=12 clino= datab=1961 datae=1990 tempb= tempe=
+  [2888] 璐濆凹澶氬皵濮?raintype= rainunit= months=12 clino= datab= datae= tempb= tempe=
+  [2182] 鍩冨皵鍒?raintype= rainunit= months=12 clino= datab=1981 datae=2010 tempb= tempe=
+
+鎶芥牱缁撴灉: ok=21 鏃犳皵鍊欐暟鎹?9 raintype鍒嗗竷={'PPT': 3, '': 4, 'Rainfall': 14}
+meanTemp 鏈夊€?涓虹┖: 0/252
+rainfall 绌哄€? 12  raindays 绌哄€? 48 raindays=='NULL'瀛楃涓? 0
+鏈堜唤鏁板垎甯? {12: 21}
+寮傚父/娉ㄨ:
+  2685 濂ヤ鸡 鏃犳皵鍊欐暟鎹?
+  1691 椹媺搴撳 鏃犳皵鍊欐暟鎹?
+  3368 濉為瞾寤跺幙 鏃犳皵鍊欐暟鎹?
+  2617 鏋楃壒 鏃犳皵鍊欐暟鎹?
+  1700 娉㈡尝灞?鏃犳皵鍊欐暟鎹?
+  2760 鍦ｉ樋鏇煎吂 鏃犳皵鍊欐暟鎹?
+  1659 鍧庤礉灏旈晣 鏃犳皵鍊欐暟鎹?
+  3401 濉斿反闅嗗幙 鏃犳皵鍊欐暟鎹?
+  2642 姊呭皵璞壒 鏃犳皵鍊欐暟鎹?
+exit=0
