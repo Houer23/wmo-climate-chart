@@ -150,9 +150,10 @@
 | `grid.color` / `linestyle` / `linewidth` / `alpha` / `zorder` | — | `#c9d3dd` / `--` / `0.7` / `0.75` / `0` | 网格样式 |
 | `background.bands.show` | bool | `false` | 是否显示月份背景色带（画在最底层坐标轴上，始终位于柱状图之下，不会罩住降水柱） |
 | `background.bands.mode` | str | `"season"` | `season` 季节色带 / `alternate` 隔月交替 |
+| `background.bands.hemisphere` | str | `"auto"` | 季节色带的半球：`auto` 按城市纬度自动判定（纬度 < 0 视为南半球，冬夏/春秋自动互换）/ `north` / `south`；仅影响 `season` 模式 |
 | `background.bands.alpha` | float | `0.07` | 季节色带透明度 |
 | `background.bands.alternate_color` / `alternate_alpha` | — | `#8fa8c0` / `0.06` | 交替模式颜色与透明度 |
-| `background.bands.seasons` | array | 冬春夏秋 | 每项 `{name, months:[...], color}`，月份可跨年（如冬 = [12,1,2]） |
+| `background.bands.seasons` | array | 冬春夏秋 | 每项 `{name, months:[...], color}`，月份可跨年（如冬 = [12,1,2]）；按**北半球惯例**声明，南半球城市由 `hemisphere` 自动平移半年 |
 | `zeroline.show` | bool | `false` | 是否画 0 基准线 |
 | `zeroline.color` / `linestyle` / `linewidth` / `alpha` | — | `#8899aa` / `-` / `0.8` / `0.8` | 基准线样式 |
 | `annotation.show_extremes` | bool | `false` | 是否标注极值月 |

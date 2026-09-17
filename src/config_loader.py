@@ -244,6 +244,7 @@ DEFAULTS: dict[str, Any] = {
             "bands": {
                 "show": False,
                 "mode": "season",           # season | alternate
+                "hemisphere": "auto",       # auto | north | south（auto：纬度 < 0 视为南半球）
                 "alternate_color": "#8fa8c0",
                 "alternate_alpha": 0.06,
                 "alpha": 0.07,
@@ -788,6 +789,12 @@ def validate_config(cfg: dict[str, Any]) -> list[str]:
         pdf_fonttype = -1
     if pdf_fonttype not in (3, 42):
         raise ConfigError("figure.pdf_fonttype 只能是 42（TrueType）或 3（Type 3）")
+
+    bands = (cfg["figure"].get("background") or {}).get("bands") or {}
+    hemisphere = str(bands.get("hemisphere", "auto")).lower()
+    if hemisphere not in ("auto", "north", "south"):
+        raise ConfigError("figure.background.bands.hemisphere 只能是 auto / north / south"
+                          f"（当前：{bands.get('hemisphere')}）")
 
     return warnings
 

@@ -436,6 +436,72 @@ def test_background_bands_layering() -> None:
         chart_mod.plt.close(fig)
 
 
+def _band_colors(cfg, city_obj) -> dict:
+    """返回 {月份槽位: 色带色值}，用于断言季节色带对位（同槽多层时取最后绘制的一层）。"""
+    from src import chart as chart_mod
+
+    fig = _render_figure(cfg, city_obj)
+    slots: dict = {}
+    for axis in fig.axes:
+        for patch in axis.patches:
+            if patch.get_zorder() != 0:
+                continue
+            slot = int(round(patch.get_xy()[0] + 0.5))
+            rgb = tuple(int(round(c * 255)) for c in patch.get_facecolor()[:3])
+            slots[slot] = "#%02x%02x%02x" % rgb
+    chart_mod.plt.close(fig)
+    return slots
+
+
+def test_seasonal_bands_hemisphere() -> None:
+    """季节色带按半球自动反季：南半球城市冬夏、春秋互换。"""
+    winter, spring, summer, autumn = "#4a6fa5", "#6aa84f", "#e69138", "#a64d79"
+    north, south = city(237), city(1729)   # 北京 39.93N / 卢森格林 -36.06S
+    check("夹具纬度符号正确", north.latitude > 0 and south.latitude < 0,
+          f"{north.latitude} / {south.latitude}")
+
+    cfg = load_config("seasonal")
+    north_colors = _band_colors(cfg, north)
+    check("北半球：12/1/2 月为冬色",
+          all(north_colors.get(i) == winter for i in (11, 0, 1)), str(north_colors))
+    check("北半球：6/7/8 月为夏色",
+          all(north_colors.get(i) == summer for i in (5, 6, 7)), str(north_colors))
+
+    south_colors = _band_colors(cfg, south)
+    check("南半球：12/1/2 月自动变为夏色",
+          all(south_colors.get(i) == summer for i in (11, 0, 1)), str(south_colors))
+    check("南半球：6/7/8 月自动变为冬色",
+          all(south_colors.get(i) == winter for i in (5, 6, 7)), str(south_colors))
+    check("南半球：3/4/5 月为秋色、9/10/11 月为春色",
+          all(south_colors.get(i) == autumn for i in (2, 3, 4))
+          and all(south_colors.get(i) == spring for i in (8, 9, 10)), str(south_colors))
+
+    force_north = load_config("seasonal", None,
+                              [("figure.background.bands.hemisphere", "north")])
+    check("hemisphere=north 时南半球城市保持原样",
+          _band_colors(force_north, south).get(0) == winter)
+    force_south = load_config("seasonal", None,
+                              [("figure.background.bands.hemisphere", "south")])
+    check("hemisphere=south 时北半球城市也反季",
+          _band_colors(force_south, north).get(0) == summer)
+
+    no_lat = city(1729)
+    no_lat.latitude = None
+    check("纬度缺失时按北半球处理", _band_colors(cfg, no_lat).get(0) == winter)
+
+    alt_slots = sorted(_band_colors(load_config("alt_bands"), south))
+    check("alternate 模式与半球无关", alt_slots == [0, 2, 4, 6, 8, 10], str(alt_slots))
+
+    bad = load_config("seasonal")
+    bad["figure"]["background"]["bands"]["hemisphere"] = "southpole"
+    try:
+        validate_config(bad)
+    except ConfigError as exc:
+        check("非法 hemisphere 报错", "hemisphere" in str(exc), str(exc))
+    else:
+        check("非法 hemisphere 报错", False, "未抛出")
+
+
 def test_compare_render() -> None:
     cfg = load_config("compare")
     cities = [city(237), city(1), city(156)]
@@ -524,6 +590,7 @@ def main() -> int:
     run("绘图层：边界城市渲染", test_edge_city_render)
     run("绘图层：元素全部关闭", test_series_toggle)
     run("绘图层：背景色带层级", test_background_bands_layering)
+    run("绘图层：季节色带半球反季", test_seasonal_bands_hemisphere)
     run("绘图层：多城市对比", test_compare_render)
     run("城市索引：反查与筛选", test_city_index_flatten)
 

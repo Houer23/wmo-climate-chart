@@ -384,6 +384,28 @@ def _configure_x_axis(ax, city: CityClimate, cfg: dict[str, Any]) -> np.ndarray:
     return x
 
 
+def _season_flip(city: CityClimate, bands: dict[str, Any]) -> bool:
+    """季节色带是否需要按南半球把月份平移半年。
+
+    配置里的 ``seasons`` 按**北半球惯例**声明（冬 = 12/1/2 月）。南半球的冬夏、春秋相反，
+    因此 ``hemisphere=auto`` 且城市纬度为负时，把季节月份整体平移 6 个月，让每个季节的
+    颜色落到当地真实季节上（默认四季即冬夏、春秋互换）。
+    纬度缺失或恰为 0 时按北半球处理。
+    """
+    hemisphere = str(bands.get("hemisphere", "auto")).lower()
+    if hemisphere == "south":
+        return True
+    if hemisphere == "north":
+        return False
+    latitude = city.latitude
+    return latitude is not None and latitude < 0
+
+
+def _shift_half_year(months: set[int]) -> set[int]:
+    """把 1-12 月整体平移半年（南半球反季）；非法月份保持原样，因而不会命中。"""
+    return {((m - 1 + 6) % 12) + 1 if 1 <= m <= 12 else m for m in months}
+
+
 def _draw_background(ax, city: CityClimate, cfg: dict[str, Any]) -> None:
     """绘制月份背景色带。
 
@@ -403,8 +425,11 @@ def _draw_background(ax, city: CityClimate, cfg: dict[str, Any]) -> None:
                            color=str(bands.get("alternate_color", "#8fa8c0")),
                            alpha=float(bands.get("alternate_alpha", 0.06)), zorder=0)
         return
+    flip = _season_flip(city, bands)
     for season in bands.get("seasons") or []:
         months = {int(m) for m in (season.get("months") or [])}
+        if flip:
+            months = _shift_half_year(months)
         for i, mo in enumerate(city.months):
             if mo.month in months:
                 ax.axvspan(i - 0.5, i + 0.5, color=str(season.get("color", "#cccccc")),

@@ -161,7 +161,7 @@ DrawClimateChart/
 | `paper` | 学术论文：白底、无图例边框、左对齐标题、附数据来源，输出 PDF/SVG |
 | `compact` | 紧凑小图 |
 | `minimal` | 极简：无标题/图例/网格/轴标题 |
-| `seasonal` | 季节底色带 + 气温极值月标注 |
+| `seasonal` | 季节底色带 + 气温极值月标注（南半球城市自动反季） |
 | `alt_bands` | 隔月底色 |
 | `yellow_black` | 高对比配色 |
 | `annual_table` | 表格增强：年列、转置、含 JSON 输出 |
