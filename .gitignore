@@ -15,6 +15,10 @@ env/
 cache/*
 !cache/说明.md
 
+# ---- 运行产物：自定义配置（程序自动重建，不入库） ----
+config/custom/*
+!config/custom/.gitkeep
+
 # ---- 运行产物：交付物（表格与图，可由命令重新生成，不入库） ----
 # output/ 下的 CSV / Markdown / XLSX / JSON / PNG / SVG / PDF 等均为生成物，
 # 执行 python wmo_climate.py 即可重新产出；仅保留 .gitkeep 以维持目录结构。

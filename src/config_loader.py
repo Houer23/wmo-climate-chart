@@ -1,10 +1,11 @@
 """配置系统：内置完整默认值、深合并、多套 profiles、继承与样式复用、校验。
 
-三层配置来源（后者覆盖前者）
+配置来源（后者覆盖前者）
 ----------------------------
 1. 内置默认值 ``DEFAULTS``（本文件，含全部可配置项）
 2. ``config/profiles.json`` 里的命名配置（可 ``extends`` 继承、可 ``apply_styles`` 复用样式）
-3. 命令行 ``--set key.path=value`` 点路径覆盖
+3. 自定义配置（多文件，见 ``CUSTOM_PROFILES_PATH`` / ``CUSTOM_PROFILES_DIR``，按"上下顺序"加载，可跨文件 ``extends`` 继承）
+4. 命令行 ``--set key.path=value`` 点路径覆盖
 
 未指定 ``--profile`` 时使用 ``profiles.json`` 中的 ``default_profile``。
 """
@@ -22,9 +23,12 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULT_PROFILES_PATH = PROJECT_ROOT / "config" / "profiles.json"
 
-# 自定义配置文件：单独存放全部自定义配置（可含任意多个），与内置 config/profiles.json 合并共存，
-# 因此新增/调整自定义配置无需改动内置文件（同名时以本文件为准）。
+# 自定义配置（多文件，按"上下顺序"加载）：
+#   1) config/custom.json    —— 单文件（兼容旧用法）；若存在则最先加载
+#   2) config/custom/*.json  —— 多文件目录，按文件名升序加载（忽略隐藏文件与子目录）
+# 与内置 config/profiles.json 合并共存（同名时自定义优先）；后续文件可通过 extends 引用前文出现的同名配置。
 CUSTOM_PROFILES_PATH = PROJECT_ROOT / "config" / "custom.json"
+CUSTOM_PROFILES_DIR = PROJECT_ROOT / "config" / "custom"
 
 
 class ConfigError(RuntimeError):
@@ -557,10 +561,32 @@ def _load_custom_profiles(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     return {name: body}, styles
 
 
-def load_profiles_file(path: Optional[Path] = None) -> dict[str, Any]:
-    """读取 profiles 文件，并合并 `config/custom.json` 中的自定义配置。
+def _custom_config_sources() -> list[Path]:
+    """返回有序的自定义配置文件列表（按"上下顺序"加载）。
 
-    文件不存在时返回空结构（不影响内置默认值可用）；同名时**自定义配置覆盖内置配置**。
+    顺序：
+    1. ``config/custom.json``（单文件，兼容旧用法；若存在）
+    2. ``config/custom/*.json``（多文件目录，按文件名升序；忽略隐藏文件与子目录）
+
+    靠后者定义的同名 profile / style 覆盖靠前者；任意文件中的 profile 均可通过
+    ``extends`` 引用在更早文件（或内置、或外部文件）中定义的同名配置。
+    """
+    sources: list[Path] = []
+    if CUSTOM_PROFILES_PATH.is_file():
+        sources.append(CUSTOM_PROFILES_PATH)
+    if CUSTOM_PROFILES_DIR.is_dir():
+        sources.extend(
+            p for p in sorted(CUSTOM_PROFILES_DIR.glob("*.json"))
+            if p.is_file() and not p.name.startswith(".")
+        )
+    return sources
+
+
+def load_profiles_file(path: Optional[Path] = None) -> dict[str, Any]:
+    """读取内置/外部 profiles 文件，并合并全部自定义配置文件。
+
+    合并顺序：内置或外部 ``profiles.json`` → 各自定义配置文件（按 ``_custom_config_sources`` 的顺序）。
+    同名 profile / style 以**靠后**的自定义文件为准；来源文件缺失时忽略该来源。
     """
     target = Path(path) if path else DEFAULT_PROFILES_PATH
     payload: dict[str, Any] = {}
@@ -575,11 +601,12 @@ def load_profiles_file(path: Optional[Path] = None) -> dict[str, Any]:
     payload.setdefault("styles", {})
     payload.setdefault("profiles", {})
 
-    custom_profiles, custom_styles = _load_custom_profiles(CUSTOM_PROFILES_PATH)
-    if custom_styles:
-        payload["styles"] = {**payload["styles"], **custom_styles}
-    if custom_profiles:
-        payload["profiles"] = {**payload["profiles"], **custom_profiles}
+    for src in _custom_config_sources():
+        custom_profiles, custom_styles = _load_custom_profiles(src)
+        if custom_styles:
+            payload["styles"].update(custom_styles)
+        if custom_profiles:
+            payload["profiles"].update(custom_profiles)
     return payload
 
 

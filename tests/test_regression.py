@@ -215,6 +215,50 @@ def test_config_unknown_key_warning() -> None:
     check("未知配置项给出告警", any("不存在的项" in w for w in warnings), str(warnings))
 
 
+def test_custom_config_multi_file() -> None:
+    """自定义配置支持多文件：按上下顺序加载，后者可 extends 前者。"""
+    import src.config_loader as cl
+
+    tmp = ROOT / "tests" / "_output" / "custom_test"
+    tmp.mkdir(parents=True, exist_ok=True)
+    (tmp / "00_base.json").write_text(
+        json.dumps({"profiles": {"c_base": {"figure": {"figsize": [1, 1], "dpi": 10}}}}),
+        encoding="utf-8")
+    (tmp / "01_derived.json").write_text(
+        json.dumps({"profiles": {"c_sub": {"extends": "c_base", "figure": {"dpi": 99}}}}),
+        encoding="utf-8")
+    (tmp / "10_dup_a.json").write_text(
+        json.dumps({"profiles": {"c_dup": {"figure": {"dpi": 11}}}}), encoding="utf-8")
+    (tmp / "10_dup_b.json").write_text(
+        json.dumps({"profiles": {"c_dup": {"figure": {"dpi": 22}}}}), encoding="utf-8")
+
+    saved_dir, saved_file = cl.CUSTOM_PROFILES_DIR, cl.CUSTOM_PROFILES_PATH
+    cl.CUSTOM_PROFILES_DIR = tmp
+    cl.CUSTOM_PROFILES_PATH = ROOT / "config" / "nonexistent_custom.json"
+    try:
+        doc = load_profiles_file()
+        profiles = doc.get("profiles") or {}
+        check("多文件自定义配置均被加载",
+              {"c_base", "c_sub", "c_dup"} <= set(profiles),
+              str(sorted(profiles.keys())))
+        base = resolve_profile("c_base", doc)
+        check("前序配置 c_base 保留 figsize", base["figure"]["figsize"] == [1, 1],
+              str(base["figure"]["figsize"]))
+        check("前序配置 c_base 保留 dpi=10", base["figure"]["dpi"] == 10,
+              str(base["figure"]["dpi"]))
+        sub = resolve_profile("c_sub", doc)
+        check("子配置跨文件继承 c_base 的 figsize", sub["figure"]["figsize"] == [1, 1],
+              str(sub["figure"]["figsize"]))
+        check("子配置自身项 dpi=99 生效", sub["figure"]["dpi"] == 99,
+              str(sub["figure"]["dpi"]))
+        dup = resolve_profile("c_dup", doc)
+        check("同名配置按上下顺序覆盖（后序 dpi=22）", dup["figure"]["dpi"] == 22,
+              str(dup["figure"]["dpi"]))
+    finally:
+        cl.CUSTOM_PROFILES_DIR = saved_dir
+        cl.CUSTOM_PROFILES_PATH = saved_file
+
+
 # ======================= 3. 表格层 =======================
 
 def test_tables(tmp: Path) -> None:
@@ -424,6 +468,7 @@ def main() -> int:
     run("配置层：多套配置解析", test_profiles_resolution)
     run("配置层：非法配置报错", test_config_errors)
     run("配置层：未知配置项告警", test_config_unknown_key_warning)
+    run("配置层：自定义配置多文件继承", test_custom_config_multi_file)
     run("表格层：基础四格式", lambda: test_tables(tmp))
     run("表格层：变体（年列/英制/极简/空值）", lambda: test_tables_variants(tmp))
     run("绘图层：全部配置渲染", test_all_profiles_render)

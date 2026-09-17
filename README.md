@@ -108,7 +108,8 @@ DrawClimateChart/
 ├── requirements.txt
 ├── config/
 │   ├── profiles.json         # 内置配置（default + 14 套预设 + 可复用样式）
-│   ├── custom.json           # 自定义配置（集中存放，如「简图」）
+│   ├── custom.json           # 自定义配置（单文件，如「简图」）
+│   ├── custom/               # 自定义配置（多文件目录，按文件名顺序加载，可互继承）
 │   └── README.md             # ★ 配置项完整字典
 ├── src/
 │   ├── http_client.py        # 请求层：主请求头 / 超时 / 退避重试 / BOM 解码 / 缓存
@@ -121,7 +122,7 @@ DrawClimateChart/
 │   └── pipeline.py           # 编排：单城 / 批量 / 对比
 ├── scripts/                  # 可复用工具（夹具抓取 / CLI 验收 / 缺失值扫描）
 ├── tests/
-│   ├── test_regression.py    # 回归测试（离线可跑，124 项断言）
+│   ├── test_regression.py    # 回归测试（离线可跑，130 项断言）
 │   ├── fixtures/             # 真实响应样本（含城市索引与 samples/ 抽样数据）
 │   └── _output/              # 测试产物：渲染核对图 / 表格中间输出（不入库）
 ├── output/                   # 交付物：表格与图（生成物，不入库）
@@ -134,17 +135,19 @@ DrawClimateChart/
 
 ## 6. 配置系统
 
-三层来源，后者覆盖前者：
+四层来源，后者覆盖前者：
 
 1. **内置默认值**（`src/config_loader.py` 的 `DEFAULTS`，含全部可配置项）
-2. **配置文件中的命名配置**：内置 `config/profiles.json` + 自定义 **`config/custom.json`**
-   （两者合并，**同名时自定义优先**；可 `extends` 继承、可 `apply_styles` 复用样式、可只写要改的项）
-3. **命令行 `--set 键=值`** 点路径覆盖
+2. **配置文件中的命名配置**：内置 `config/profiles.json`
+3. **自定义配置（多文件）**：`config/custom.json` + `config/custom/*.json`，按"上下顺序"加载，
+   与内置配置合并共存（**同名时自定义优先**；可 `extends` 跨文件继承、可 `apply_styles` 复用样式、可只写要改的项）
+4. **命令行 `--set 键=值`** 点路径覆盖
 
 未指定 `--profile` 时使用 `profiles.json` 的 `default_profile`。
 
-> **自定义配置**：全部自定义配置集中写在 `config/custom.json` 的 `profiles` 下（一配置一项），
-> 与内置配置合并共存，无需改动 `profiles.json`。仓库已内置一个示例 `简图`。
+> **自定义配置**：写在 `config/custom.json` 或 `config/custom/*.json` 的 `profiles` 下（一配置一项），
+> 与内置配置合并共存，无需改动 `profiles.json`；多文件时**后加载者覆盖先加载者**，
+> 且任意文件中的配置都能 `extends` 更早文件中出现的同名配置。仓库已内置一个示例 `简图`。
 
 ### 6.1 内置预设
 
@@ -172,8 +175,8 @@ python wmo_climate.py --init-profile my_style  # 导出全量模板后再改
 
 ### 6.2 自定义配置示例
 
-> 自定义配置请集中写入 **`config/custom.json`** 的 `profiles` 下（可放任意多个），
-> 无需复制内置文件；同名配置会覆盖内置同名项。
+> 自定义配置写在 **`config/custom.json`** 或 **`config/custom/*.json`** 的 `profiles` 下（可放任意多个），
+> 无需复制内置文件；同名配置会覆盖内置同名项。多文件按文件名升序加载，后续文件可 `extends` 前文出现的配置：
 
 ```jsonc
 {

@@ -7,12 +7,14 @@
 **配置来源与优先级**（后者覆盖前者）：
 
 1. 内置默认值 `DEFAULTS`（= 下方所有默认值）
-2. 配置文件中选定的配置：内置 `config/profiles.json` 与自定义 **`config/custom.json`** 合并
-   （**同名时自定义优先**）；`--profile <名称>`；未指定用 `default_profile`
-3. 命令行 `--set 键=值`（可重复，点路径，值按 JSON/数字/布尔自动识别）
+2. 内置 `config/profiles.json` 选定的配置；`--profile <名称>`；未指定用 `default_profile`
+3. 自定义配置（多文件）：`config/custom.json` + `config/custom/*.json` 按"上下顺序"加载并合并
+   （**同名时自定义优先**；可 `extends` 跨文件继承）；`--profiles-file` 可替换为外部整套配置
+4. 命令行 `--set 键=值`（可重复，点路径，值按 JSON/数字/布尔自动识别）
 
-**自定义配置**：全部自定义配置集中写在 `config/custom.json` 的 `profiles` 下（一配置一项），
-与内置配置合并共存，无需改动 `profiles.json`。示例：
+**自定义配置**：写在 `config/custom.json` 或 `config/custom/*.json` 的 `profiles` 下（一配置一项），
+多文件按文件名升序加载（忽略隐藏文件与子目录）、后加载者覆盖先加载者，且可 `extends` 更早文件中的同名配置。
+其中 `config/custom/*.json` 为本地配置目录，默认不入库（见 `.gitignore`，仅保留 `.gitkeep`）。示例：
 
 ```jsonc
 {
