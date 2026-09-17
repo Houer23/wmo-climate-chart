@@ -387,6 +387,55 @@ def test_series_toggle() -> None:
         check("关闭全部元素时给出明确错误", False, "未报错")
 
 
+def _render_figure(cfg, city_obj):
+    """渲染但**不落盘**，返回 Figure 供层级断言使用。"""
+    from src import chart as chart_mod
+
+    captured: dict = {}
+    original = chart_mod._save
+    chart_mod._save = lambda fig, out_paths, cfg: (captured.__setitem__("fig", fig), out_paths)[1]
+    try:
+        render_city_chart(city_obj, cfg, [], logger=None)
+    finally:
+        chart_mod._save = original
+    return captured["fig"]
+
+
+def test_background_bands_layering() -> None:
+    """背景色带必须落在降水柱之下（季节/隔月两种模式）。
+
+    两种成立方式：色带画在**更低的坐标轴**（轴 zorder 更小 = 先绘制 = 在下），
+    或与柱子同轴时**艺术家 zorder 更低**。
+    """
+    from src import chart as chart_mod
+
+    beijing = city(237)
+    for profile, expected in (("seasonal", 12), ("alt_bands", 6)):
+        fig = _render_figure(load_config(profile), beijing)
+        band_axes = [a for a in fig.axes if any(p.get_zorder() == 0 for p in a.patches)]
+        bar_axes = [a for a in fig.axes if any(p.get_zorder() >= 2 for p in a.patches)]
+        band_patches = [p for a in band_axes for p in a.patches if p.get_zorder() == 0]
+
+        check(f"{profile}：色带数量 {expected}", len(band_patches) == expected, str(len(band_patches)))
+        check(f"{profile}：降水柱存在且独占一轴", len(bar_axes) == 1, str(len(bar_axes)))
+        check(f"{profile}：色带只占一个坐标轴", len(band_axes) == 1, str(len(band_axes)))
+        if band_axes and bar_axes:
+            band_axis, bar_axis = band_axes[0], bar_axes[0]
+            check(f"{profile}：色带轴不高于柱状图轴",
+                  band_axis.get_zorder() <= bar_axis.get_zorder(),
+                  f"色带轴 zorder={band_axis.get_zorder()} 柱轴 zorder={bar_axis.get_zorder()}")
+            if band_axis is bar_axis:
+                top_band = max(p.get_zorder() for p in band_axis.patches if p.get_zorder() == 0)
+                bar_patches = [p for p in bar_axis.patches if p.get_zorder() >= 2]
+                check(f"{profile}：同轴时柱子压在色带之上",
+                      min(b.get_zorder() for b in bar_patches) > top_band,
+                      "同轴层级异常")
+        if profile == "seasonal":
+            slots = sorted({round(p.get_xy()[0] + 0.5) for p in band_patches})
+            check("季节色带覆盖 1-12 月各槽位", slots == list(range(12)), str(slots))
+        chart_mod.plt.close(fig)
+
+
 def test_compare_render() -> None:
     cfg = load_config("compare")
     cities = [city(237), city(1), city(156)]
@@ -474,6 +523,7 @@ def main() -> int:
     run("绘图层：全部配置渲染", test_all_profiles_render)
     run("绘图层：边界城市渲染", test_edge_city_render)
     run("绘图层：元素全部关闭", test_series_toggle)
+    run("绘图层：背景色带层级", test_background_bands_layering)
     run("绘图层：多城市对比", test_compare_render)
     run("城市索引：反查与筛选", test_city_index_flatten)
 
@@ -487,7 +537,8 @@ def main() -> int:
     if failed:
         print("\n失败明细：")
         for name, detail in failed:
-            print(f"  ✗ {name}")
+            # 用 GBK 可编码的「×」而非 U+2717，避免 cp936 控制台在打印失败明细时崩掉
+            print(f"  × {name}")
             if detail:
                 print(f"      {detail.splitlines()[0] if detail else ''}")
     print(f"\n渲染核对图目录：{VERIFY_DIR}")

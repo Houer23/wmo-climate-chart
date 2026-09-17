@@ -148,7 +148,7 @@
 | `grid.axis` | str | `"y"` | `x` / `y` / `both` |
 | `grid.which` | str | `"major"` | `major` / `minor` / `both` |
 | `grid.color` / `linestyle` / `linewidth` / `alpha` / `zorder` | — | `#c9d3dd` / `--` / `0.7` / `0.75` / `0` | 网格样式 |
-| `background.bands.show` | bool | `false` | 是否显示月份背景色带 |
+| `background.bands.show` | bool | `false` | 是否显示月份背景色带（画在最底层坐标轴上，始终位于柱状图之下，不会罩住降水柱） |
 | `background.bands.mode` | str | `"season"` | `season` 季节色带 / `alternate` 隔月交替 |
 | `background.bands.alpha` | float | `0.07` | 季节色带透明度 |
 | `background.bands.alternate_color` / `alternate_alpha` | — | `#8fa8c0` / `0.06` | 交替模式颜色与透明度 |

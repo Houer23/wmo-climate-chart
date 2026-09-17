@@ -385,6 +385,12 @@ def _configure_x_axis(ax, city: CityClimate, cfg: dict[str, Any]) -> np.ndarray:
 
 
 def _draw_background(ax, city: CityClimate, cfg: dict[str, Any]) -> None:
+    """绘制月份背景色带。
+
+    ``ax`` 必须是**最底层坐标轴**（由 ``_stack_axes`` 给出），与网格同理：柱状图所在的轴
+    可能被压在主/三轴之下，若色带画在含折线（后绘制）的主轴上，半透明色带会整体罩在
+    柱子上。各轴与主轴共用同一条 x 轴（``twinx``），因此换轴不影响色带对位。
+    """
     bands = (cfg["figure"].get("background") or {}).get("bands") or {}
     if not bands.get("show"):
         return
@@ -753,7 +759,8 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
     bottom_key = _stack_axes(cfg, axis_map, by_axis)
 
     x = _configure_x_axis(ax, city, cfg)
-    _draw_background(ax, city, cfg)
+    # 色带画在最底层坐标轴上：柱状图若在副轴（被压在主轴之下），色带画在主轴上会罩住柱子
+    _draw_background(axis_map[bottom_key], city, cfg)
 
     # ---- 绘制元素 ----
     # 绘图顺序固定为「先柱状、后折线」（同组内按 order_in_legend）；
