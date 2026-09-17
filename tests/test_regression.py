@@ -941,6 +941,116 @@ def test_compare_render() -> None:
 
 # ======================= 5. 城市索引 =======================
 
+def test_cli_batch_targets() -> None:
+    """CLI 批量目标解析：逗号分割、逐项去空白、去重，且不误拆全角逗号城市名。"""
+    import wmo_climate as cli
+
+    check("逗号分割并逐项去空白",
+          cli._split_targets(["237, 1 ,156"]) == ["237", "1", "156"],
+          str(cli._split_targets(["237, 1 ,156"])))
+    check("重复传参与逗号写法等价",
+          cli._split_targets(["237", "1, 156"]) == ["237", "1", "156"],
+          str(cli._split_targets(["237", "1, 156"])))
+    check("丢弃空项", cli._split_targets([",237,,1,"]) == ["237", "1"],
+          str(cli._split_targets([",237,,1,"])))
+    check("全角逗号的城市名保持完整（圣保罗，明尼苏达州）",
+          cli._split_targets(["圣保罗，明尼苏达州"]) == ["圣保罗，明尼苏达州"],
+          str(cli._split_targets(["圣保罗，明尼苏达州"])))
+    check("城市名同样支持逗号批量",
+          cli._split_targets(["北京, 香港 ,莫斯科"]) == ["北京", "香港", "莫斯科"],
+          str(cli._split_targets(["北京, 香港 ,莫斯科"])))
+    check("去重保持首次出现顺序",
+          cli._dedup_targets([237, 1, 237, 156, 1]) == [237, 1, 156],
+          str(cli._dedup_targets([237, 1, 237, 156, 1])))
+    import contextlib
+    import io
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        code = cli.main(["--city-id", "237,abc"])
+    check("非法 city-id 报错退出码 2（且不发起请求）", code == 2, str(code))
+    check("错误提示含用法示例",
+          "--city-id" in buf.getvalue() and "237,1,156" in buf.getvalue(), buf.getvalue())
+
+    # main 的批量接线：把 run_batch 换成记录器，验证 argv → 列表 → 逐个处理（不打网络）
+    class _Summary:
+        fail_count = 0
+        compare_charts: list = []
+
+        def describe(self) -> str:
+            return "(批量记录器)"
+
+    seen: list[list[int]] = []
+    original = cli.run_batch
+    cli.run_batch = lambda cfg, ids, logger, out_dir: (seen.append(list(ids)), _Summary())[1]
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = cli.main(["--city-id", "237, 1 ,237", "--no-chart", "--no-table"])
+    finally:
+        cli.run_batch = original
+    check("main 把逗号列表解析成城市列表并去重后交给批量处理",
+          seen == [[237, 1]] and code == 0, f"seen={seen} code={code}")
+
+
+def test_request_throttle() -> None:
+    """批量请求排队限速：相邻网络请求间隔不小于 fetch.min_interval（默认 1 秒）。"""
+    import shutil
+
+    from src import http_client as hc
+
+    check("默认限速为每秒 1 次请求",
+          float(load_config(None)["fetch"]["min_interval"]) == 1.0,
+          str(load_config(None)["fetch"].get("min_interval")))
+
+    # 1) 纯函数：首次不等待，随后的请求补足间隔
+    state = {"t": 1000.0}
+    slept: list[float] = []
+
+    def fake_sleep(sec: float) -> None:
+        slept.append(round(sec, 3))
+        state["t"] += sec
+
+    hc._last_request_at = 0.0
+    sent: list[float] = []
+    for bump in (0.0, 0.2, 0.0, 3.0):        # 立刻、0.2s 后、再立刻、隔了 3s 再发
+        state["t"] += bump
+        hc.throttle(1.0, clock=lambda: state["t"], sleep=fake_sleep)
+        sent.append(state["t"])
+    gaps = [round(b - a, 3) for a, b in zip(sent, sent[1:])]
+    check("相邻请求间隔均不小于 1s（即每秒最多 1 次请求）",
+          all(g >= 1.0 - 1e-9 for g in gaps), f"间隔={gaps}")
+    check("首次与已超间隔的请求不等待，其余精确补足",
+          slept == [0.8, 1.0], str(slept))
+
+    hc._last_request_at = 0.0
+    no_sleep: list[float] = []
+    hc.throttle(0.0, clock=lambda: state["t"], sleep=no_sleep.append)
+    check("min_interval=0 时不限速", no_sleep == [], str(no_sleep))
+
+    # 2) 每个真实请求（含重试）都排队；命中缓存则不排队
+    calls: list[float] = []
+    original = hc.throttle
+    hc.throttle = lambda interval, logger=None, clock=None, sleep=None: calls.append(interval)
+    cache_dir = ROOT / "tests" / "_output" / "throttle_cache"
+    shutil.rmtree(cache_dir, ignore_errors=True)
+    try:
+        client = hc.HttpClient({"min_interval": 0.5}, cache_dir=cache_dir)
+        client._request_once = lambda url, headers: hc.FetchResult(
+            url=url, status=200, content=b"{}", text="{}")
+        client.get("https://example.invalid/a")
+        client.get("https://example.invalid/b")
+        check("每个真实请求前都按 min_interval 排队", calls == [0.5, 0.5], str(calls))
+
+        calls.clear()
+        client.get("https://example.invalid/a")       # 命中缓存
+        check("命中缓存不排队也不计数",
+              calls == [] and client.request_count == 2, f"{calls} / {client.request_count}")
+    finally:
+        hc.throttle = original
+        hc._last_request_at = 0.0
+        shutil.rmtree(cache_dir, ignore_errors=True)
+
+
 def test_city_index_flatten() -> None:
     raw = json.loads((ROOT / "tests" / "fixtures" / "country_index_zh.json").read_text(encoding="utf-8-sig"))
     entries = _flatten(raw)
@@ -1012,6 +1122,8 @@ def main() -> int:
     run("绘图层：极值标注自动避让", test_extremes_label_avoidance)
     run("绘图层：多城市对比", test_compare_render)
     run("城市索引：反查与筛选", test_city_index_flatten)
+    run("CLI：批量目标解析", test_cli_batch_targets)
+    run("请求层：批量排队限速", test_request_throttle)
 
     if "--network" in sys.argv:
         run("联网：真实请求与 404", test_network)

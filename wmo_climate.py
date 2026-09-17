@@ -12,6 +12,10 @@ python wmo_climate.py --city-id 237 --profile presentation --out-dir output/demo
 # 一次批量多个城市（其中一个失败不影响其他）
 python wmo_climate.py --city-id 237 --city-id 1 --city-id 999999
 
+# 批量也可以用逗号一次写完（等价于重复传参）
+python wmo_climate.py --city-id 237,1,156
+python wmo_climate.py --city 北京,香港,莫斯科
+
 # 按城市名自动反查 cityId
 python wmo_climate.py --city 北京 --city 香港
 
@@ -29,6 +33,11 @@ python wmo_climate.py --init-profile my_style
 # 查城市编号
 python wmo_climate.py --search 北京
 python wmo_climate.py --list-cities --country 中国
+
+说明
+----
+批量成图时请求会**排队限速**（默认每秒不超过 1 次请求，见 ``fetch.min_interval``），
+以便对数据源保持礼貌；单个城市失败不影响其余城市。
 """
 
 from __future__ import annotations
@@ -94,10 +103,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     target = parser.add_argument_group("目标城市")
-    target.add_argument("--city-id", type=int, action="append", default=[], metavar="ID",
-                        help="城市编号，可重复传入实现批量；数据源地址为 city.html?cityId=ID")
+    target.add_argument("--city-id", action="append", default=[], metavar="ID",
+                        help="城市编号；可用逗号一次传多个（如 237,1,156），也可重复传入"
+                             "（如 --city-id 237 --city-id 1），两者等价")
     target.add_argument("--city", action="append", default=[], metavar="名称",
-                        help="城市名称，自动反查 cityId（如 --city 北京），可重复传入")
+                        help="城市名称，自动反查 cityId（如 --city 北京）；可用逗号一次传多个"
+                             "（如 --city 北京,香港），也可重复传入")
     target.add_argument("--compare", action="append", default=[], metavar="ID或名称",
                         help="多城市对比：可传 cityId 或城市名，重复传入多个")
     target.add_argument("--compare-metric", metavar="元素",
@@ -131,6 +142,32 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument("--version", action="version", version=f"wmo_climate {__version__}")
     return parser
+
+
+def _split_targets(values: list[str]) -> list[str]:
+    """把批量目标参数展开成列表：按逗号分割、逐项去首尾空白、丢弃空项。
+
+    只按**半角逗号**分割：WMO 城市名里用的是全角逗号（如「圣保罗，明尼苏达州」），
+    若把全角逗号也当分隔符，这类城市名会被拆坏。
+    """
+    expanded: list[str] = []
+    for raw in values or []:
+        for piece in str(raw).split(","):
+            text = piece.strip()
+            if text:
+                expanded.append(text)
+    return expanded
+
+
+def _dedup_targets(city_ids: list[int]) -> list[int]:
+    """按首次出现顺序去重（重复城市既浪费时间也重复请求数据源）。"""
+    seen: set[int] = set()
+    unique: list[int] = []
+    for city_id in city_ids:
+        if city_id not in seen:
+            seen.add(city_id)
+            unique.append(city_id)
+    return unique
 
 
 def _parse_overrides(raw_items: list[str], args: argparse.Namespace) -> list[tuple[str, str]]:
@@ -225,11 +262,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     # ---- 解析目标城市 ---------------------------------------------------
-    city_ids: list[int] = list(args.city_id)
+    # --city-id / --city 都支持「逗号一次传多个」与「重复传参」两种写法
+    city_ids: list[int] = []
+    for text in _split_targets(args.city_id):
+        if not text.isdigit():
+            print(f"错误：--city-id 需要整数编号，收到「{text}」。"
+                  f"多个编号用逗号分隔，如 --city-id 237,1,156")
+            return 2
+        city_ids.append(int(text))
     compare_items: list[int] = []
     try:
-        if args.city:
-            resolved, _ = resolve_city_ids(cfg, args.city, logger, out_dir)
+        names = _split_targets(args.city)
+        if names:
+            resolved, _ = resolve_city_ids(cfg, names, logger, out_dir)
             city_ids.extend(resolved)
         for item in args.compare:
             text = str(item).strip()
@@ -241,6 +286,11 @@ def main(argv: list[str] | None = None) -> int:
     except (CityLookupError, FetchError) as exc:
         logger.error(str(exc))
         return 3
+
+    unique_ids = _dedup_targets(city_ids)
+    if len(unique_ids) != len(city_ids):
+        logger.info(f"已去重 {len(city_ids) - len(unique_ids)} 个重复城市")
+    city_ids = unique_ids
 
     if not city_ids and not compare_items:
         build_parser().print_help()

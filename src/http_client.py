@@ -7,6 +7,9 @@
 * 数据文件返回 ``Content-Type: application/xml`` 但实际内容是 **JSON**，
   且带 UTF-8 BOM，须按 ``utf-8-sig`` 解码。
 * 无效 cityId 返回 **HTTP 404**，这类错误不重试。
+
+此外本模块做**进程级请求节流**：批量成图时连续请求之间会排队等待，
+默认 ``fetch.min_interval = 1.0`` 秒，即每秒最多 1 次请求。
 """
 
 from __future__ import annotations
@@ -39,6 +42,33 @@ DEFAULT_HEADERS = {
 
 # 这些 HTTP 状态码值得重试（服务端临时问题）
 RETRY_STATUS = {408, 425, 429, 500, 502, 503, 504}
+
+# 进程内共享的上一次请求时刻：同一次运行里的多个 HttpClient（如先取城市索引、
+# 再逐个取城市数据）也一起排队，避免"两个客户端各自计数"导致连发。
+_last_request_at: float = 0.0
+
+
+def throttle(min_interval: float, logger=None, clock=None, sleep=None) -> float:
+    """按最小间隔排队：距上次请求不足 ``min_interval`` 秒时先等待，返回等待秒数。
+
+    间隔取自当次调用的配置；``min_interval <= 0`` 表示不限速。首次请求不等待。
+    """
+    global _last_request_at
+    interval = float(min_interval or 0.0)
+    if interval <= 0:
+        return 0.0
+    now_fn = clock or time.monotonic
+    sleep_fn = sleep or time.sleep
+    now = now_fn()
+    wait = interval - (now - _last_request_at) if _last_request_at else 0.0
+    if wait > 0:
+        if logger is not None:
+            logger.debug(f"限速：等待 {wait:.2f}s（相邻请求间隔不小于 {interval:g}s）")
+        sleep_fn(wait)
+    else:
+        wait = 0.0
+    _last_request_at = now_fn()
+    return wait
 
 
 class FetchError(RuntimeError):
@@ -91,6 +121,7 @@ class HttpClient:
         self.retries = int(self.cfg.get("retries", 4))
         self.backoff = float(self.cfg.get("backoff", 1.2))
         self.backoff_max = float(self.cfg.get("backoff_max", 15))
+        self.min_interval = float(self.cfg.get("min_interval", 1.0) or 0.0)
         self.verify_ssl = bool(self.cfg.get("verify_ssl", True))
         self.proxy = (self.cfg.get("proxy") or "").strip()
 
@@ -194,6 +225,7 @@ class HttpClient:
 
         last_error: Optional[Exception] = None
         for attempt in range(1, self.retries + 2):
+            throttle(self.min_interval, self.logger)   # 连带重试一起限速，每秒最多 1 次请求
             self.request_count += 1
             try:
                 result = self._request_once(url, headers)

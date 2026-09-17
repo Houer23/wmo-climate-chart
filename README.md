@@ -27,6 +27,10 @@ python wmo_climate.py --city-id 237
 # 按城市名自动反查 cityId
 python wmo_climate.py --city 北京 --city 香港
 
+# 批量：逗号一次写完（等价于重复传参）
+python wmo_climate.py --city-id 237,1,156
+python wmo_climate.py --city 北京,香港,莫斯科
+
 # 换一套配置
 python wmo_climate.py --city-id 237 --profile presentation
 
@@ -47,8 +51,8 @@ python wmo_climate.py --list-cities --country 中国
 
 | 参数 | 说明 |
 |---|---|
-| `--city-id ID` | 城市编号，可重复传入实现批量 |
-| `--city 名称` | 城市名称，自动反查 cityId，可重复 |
+| `--city-id ID` | 城市编号；逗号一次传多个（`237,1,156`）或重复传入均可，自动去重 |
+| `--city 名称` | 城市名称，自动反查 cityId；同样支持逗号批量（`北京,香港`），自动去重 |
 | `--compare ID或名称` | 多城市对比，可重复；同时传多个 cityId 或城市名 |
 | `--compare-metric 元素` | 对比元素：`minTemp`/`maxTemp`/`meanTemp`/`rainfall`/`raindays` |
 | `--profile 名称` | 选用配置；**未指定则用默认配置** |
@@ -96,6 +100,7 @@ python wmo_climate.py --list-cities --country 中国
 | 无效 cityId 返回 HTTP 404 | 识别为「城市不存在」，不重试 |
 | cityId > 600000 为 ECMWF 模式城市 | 无气候数据，给出明确提示 |
 | 服务端存在**间歇性 TLS 断连**（`UNEXPECTED_EOF_WHILE_READING`） | 超时 + 指数退避重试（`fetch.retries` / `fetch.backoff`） |
+| 批量成图时不宜高频请求数据源 | 相邻网络请求排队限速，默认每秒最多 1 次（`fetch.min_interval`，含重试；命中缓存不占额度） |
 | 请求头非强制但构造完整可提升稳定性 | 参见 `fetch.headers`（UA / Accept / Accept-Language / Connection 等均可配） |
 
 ---

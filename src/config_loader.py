@@ -143,6 +143,7 @@ DEFAULTS: dict[str, Any] = {
         "retries": 4,                      # 应对实测的间歇性 TLS 断连
         "backoff": 1.2,
         "backoff_max": 15,
+        "min_interval": 1.0,               # 两次网络请求的最小间隔（秒）；批量成图时每秒 ≤ 1 次
         "verify_ssl": True,
         "proxy": "",
         "save_raw": False,
