@@ -286,6 +286,10 @@ DEFAULTS: dict[str, Any] = {
             "fontsize": 9,
             "color": "#a32d2d",
             "show_value": True,
+            "avoid_overlap": True,          # 自动避让曲线/另一标注/平均降水线
+            "gap": 2.0,                     # 碰撞判定的安全间隙（点）
+            "max_distance": 52.0,           # 外推搜索的最远距离（点）
+            "allow_flip": True,             # 允许翻到数据点另一侧
         },
         "credit": {
             "show": False,

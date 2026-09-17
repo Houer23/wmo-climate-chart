@@ -171,6 +171,10 @@
 | `annotation.show_extremes` | bool | `false` | 是否标注极值月 |
 | `annotation.series` | str | `"meanTemp"` | 标注哪个元素的极值 |
 | `annotation.fontsize` / `color` / `show_value` | — | `9` / `#a32d2d` / `true` | 标注样式 |
+| `annotation.avoid_overlap` | bool | `true` | **自动避让**：极值标注会按候选位置搜索，避开数据曲线、另一条极值标注与平均降水线，并尽量不越出绘图区；设 `false` 恢复固定偏移 |
+| `annotation.gap` | float | `2.0` | 碰撞判定的安全间隙（点）；贴得比它更近也算撞上 |
+| `annotation.max_distance` | float | `52.0` | 位置搜索的半径上限（点） |
+| `annotation.allow_flip` | bool | `true` | 是否允许翻到数据点另一侧（`false` 则最高始终在上、最低始终在下） |
 | `credit.show` | bool | `false` | 是否显示数据来源署名 |
 | `credit.text` | str 模板 | `"数据来源：世界天气信息服务网（WMO）"` | 署名文本 |
 | `credit.fontsize` / `color` / `loc` / `pad` | — | `8.5` / `#7a8899` / `right` / `6` | 署名样式 |

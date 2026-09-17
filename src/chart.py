@@ -15,7 +15,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
+from matplotlib.text import Text  # noqa: E402
 from matplotlib.ticker import FuncFormatter, MaxNLocator  # noqa: E402
+from matplotlib.transforms import Bbox  # noqa: E402
 
 from .models import CityClimate, normalize_series_key  # noqa: E402
 
@@ -26,6 +28,9 @@ AXIS_KEYS = ("primary", "secondary", "tertiary")
 # 绘制顺序：柱状类先画（打底），折线/曲线类后画（压在上层）。
 # 图例顺序不受影响，仍按 series.order_in_legend。
 BAR_CHART_TYPES = {"bar", "barh"}
+
+# 极值标注的基准偏移（点）：最高向上、最低向下；自动避让在此基准上按候选序列外推
+EXTREME_LABEL_OFFSETS = {"最高": 16.0, "最低": -22.0}
 
 
 def _draw_priority(scfg: dict[str, Any]) -> int:
@@ -916,6 +921,151 @@ def _context(city: CityClimate, cfg: dict[str, Any]) -> dict[str, str]:
 
 # ---- 主入口：单城市 ----------------------------------------------------
 
+def _grow_box(box: Any, pad: float) -> Any:
+    """把 Bbox 四边各外扩 pad 像素。
+
+    注意：``Bbox.expanded(sw, sh)`` 在本项目的 matplotlib 版本里按**倍数**解释参数，
+    直接传点数会把盒子放大数倍，因此统一用这个显式版本。
+    """
+    return Bbox.from_extents(box.x0 - pad, box.y0 - pad, box.x1 + pad, box.y1 + pad)
+
+
+def _densify(points: np.ndarray, samples: int = 32) -> np.ndarray:
+    """把折线按段加密成点云，便于用"点在矩形内"做碰撞判定。"""
+    if len(points) < 2:
+        return points
+    starts, ends = points[:-1], points[1:]
+    ts = np.linspace(0.0, 1.0, samples)[:, None, None]
+    return (starts[None] + (ends - starts)[None] * ts).reshape(-1, 2)
+
+
+def _cloud_hits_box(points: np.ndarray, box: Any) -> bool:
+    """点云（显示坐标）里是否有落在矩形内的点。"""
+    if len(points) == 0:
+        return False
+    return bool(np.any((points[:, 0] >= box.x0) & (points[:, 0] <= box.x1)
+                       & (points[:, 1] >= box.y0) & (points[:, 1] <= box.y1)))
+
+
+def _place_extremes_label(ax, text: str, xy: tuple[float, float], base_dy: float,
+                          line_obstacles: list[Any], placed_boxes: list[Any],
+                          acfg: dict[str, Any]) -> tuple[Any, Optional[Any]]:
+    """放置最高/最低气温标注，必要时自动避让，返回 (标注对象, 最终文字盒)。
+
+    候选集合：沿偏好侧外推（基准 / 1.6 / 2.2 / 3.0 倍）× 横向 0 / ±30 / ±60pt，
+    以及翻到数据点另一侧（``allow_flip``）的同样几档；全部候选都会被评估，取
+    "冲突最少 → 越界最少 → 位移最小（翻边另加权重）"的位置，因此既避开曲线，也尽量少动。
+    偏移以**点**为单位，与画布尺寸、布局无关。
+    """
+    color = str(acfg.get("color", "#a32d2d"))
+    anno = ax.annotate(
+        text, xy=xy, xytext=(0.0, float(base_dy)), textcoords="offset points",
+        ha="center", fontsize=float(acfg.get("fontsize", 9)), color=color, zorder=9,
+        arrowprops={"arrowstyle": "-", "color": color, "linewidth": 0.8},
+    )
+    if not acfg.get("avoid_overlap", True):
+        return anno, None
+    try:
+        fig = ax.get_figure()
+        renderer = fig.canvas.get_renderer()
+        axes_box = ax.get_window_extent()
+        # 带箭头的标注在 draw 之前文字变换尚未更新，先手动刷新一次；之后
+        # Text.get_window_extent 取到的**纯文字盒**与真正绘制出来的完全一致
+        # （不能用 Annotation.get_window_extent：它会把箭头并进来，必然压住数据点自身）。
+        anno.update_positions(renderer)
+        box0 = Text.get_window_extent(anno, renderer)
+    except (AttributeError, IndexError, TypeError, ValueError):
+        return anno, None
+
+    scale = float(fig.dpi) / 72.0                      # 点 → 像素
+    gap_px = float(acfg.get("gap", 2.0) or 0.0) * scale
+    limit = abs(float(acfg.get("max_distance", 52.0) or 52.0))
+
+    def cap(value: float) -> float:
+        """限制搜索半径：各分量都不超过 max_distance。"""
+        return (1.0 if value >= 0 else -1.0) * min(abs(value), limit)
+
+    base = float(base_dy)
+    preferred_up = base >= 0
+    candidates: list[tuple[float, float]] = []
+    for mult in (1.0, 1.6, 2.2, 3.0):
+        candidates.append((0.0, cap(base * mult)))
+    for dx in (30.0, -30.0, 60.0, -60.0):
+        for mult in (1.0, 1.6, 2.2):
+            candidates.append((cap(dx), cap(base * mult)))
+    if acfg.get("allow_flip", True):
+        for mult in (1.0, 1.6, 2.2):
+            for dx in (0.0, 30.0, -30.0, 60.0, -60.0):
+                candidates.append((cap(dx), cap(-base * mult)))
+
+    clouds = []
+    for ln in line_obstacles:
+        pts = np.asarray(ln.get_xydata(), dtype=float)
+        if pts.size:
+            # axhline 用的是混合变换，必须走艺术家自己的 transform
+            clouds.append(_densify(ln.get_transform().transform(pts)))
+
+    best: Optional[tuple[tuple[float, float, float], float, float]] = None
+    for dx, dy in candidates:
+        box = box0.translated(dx * scale, (dy - base) * scale)
+        test = _grow_box(box, gap_px)
+        hits = sum(1 for pts in clouds if _cloud_hits_box(pts, test))
+        hits += sum(1 for ob in placed_boxes
+                    if test.x0 < ob.x1 and ob.x0 < test.x1
+                    and test.y0 < ob.y1 and ob.y0 < test.y1)
+        spill = (int(box.x0 < axes_box.x0) + int(box.x1 > axes_box.x1)
+                 + int(box.y0 < axes_box.y0) + int(box.y1 > axes_box.y1))
+        flipped = (dy > 0) != preferred_up
+        cost = abs(dx) + abs(dy - base) + (30.0 if flipped else 0.0)
+        score = (float(hits), float(spill), cost)
+        if best is None or score < best[0]:
+            best = (score, dx, dy)
+    assert best is not None
+    _, dx, dy = best
+    anno.set_position((dx, dy))
+    return anno, box0.translated(dx * scale, (dy - base) * scale)
+
+
+def _draw_extremes_annotations(ax, city: CityClimate, cfg: dict[str, Any], x: np.ndarray,
+                               series_list: list[Any], data_lines: list[Any],
+                               mean_line: Any) -> None:
+    """最高/最低月标注。
+
+    **必须在布局定型之后调用**（``_apply_layout`` 之后）：避让判定要用到坐标区的实际
+    矩形，放布局之前拿到的是初始 subplot 位置，会把"其实没越界"的标注也挪走。
+    """
+    acfg = cfg["figure"].get("annotation") or {}
+    if not acfg.get("show_extremes"):
+        return
+    target_key = normalize_series_key(str(acfg.get("series", "meanTemp")))
+    arr = None
+    for k, _scfg, values in series_list:
+        if k == target_key:
+            arr = values
+            break
+    if arr is None or not np.isfinite(arr).any():
+        return
+
+    finite = np.where(np.isfinite(arr), arr, np.nan)
+    hi_i = int(np.nanargmax(finite))
+    lo_i = int(np.nanargmin(finite))
+    labels = city.month_labels(str(cfg["data"].get("month_label_style", "1月")))
+    obstacles = list(data_lines)
+    if mean_line is not None:
+        obstacles.append(mean_line)             # 平均降水线也是要避开的目标
+    placed_boxes: list[Any] = []
+    for idx, tag in ((hi_i, "最高"), (lo_i, "最低")):
+        text = f"{labels[idx]} {tag}"
+        if acfg.get("show_value", True):
+            text += f" {float(arr[idx]):.1f}"
+        _anno, box = _place_extremes_label(
+            ax, text, (float(x[idx]), float(arr[idx])),
+            EXTREME_LABEL_OFFSETS.get(tag, 16.0), obstacles, placed_boxes, acfg,
+        )
+        if box is not None:
+            placed_boxes.append(box)            # 后一个标注要避开前一个
+
+
 def render_city_chart(city: CityClimate, cfg: dict[str, Any],
                       out_paths: list[Path], logger=None,
                       report: Optional[dict[str, Any]] = None) -> list[Path]:
@@ -962,6 +1112,9 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
     # 绘图顺序固定为「先柱状、后折线」（同组内按 order_in_legend）；
     # 图例顺序仍按 order_in_legend，不受绘制顺序影响。
     handles_by_key: dict[str, Any] = {}
+    # 记录绘制元素前已有的 Line2D，画完后"新增的那些"就是各数据曲线（含仅标记点的那条），
+    # 供极值标注避让使用；网格线/零线/平均降水线都不在这个集合里。
+    lines_before = {id(ln) for a in axis_map.values() if a is not None for ln in a.lines}
     draw_order = sorted(series_list, key=lambda item: _draw_priority(item[1]))
     for key, scfg, arr in draw_order:
         target = axis_map.get(str(scfg.get("axis", "primary")))
@@ -983,6 +1136,8 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
             handles_by_key[key] = handle
         _draw_data_labels(target, scfg, x, arr, color)
 
+    data_lines = [ln for a in axis_map.values() if a is not None
+                  for ln in a.lines if id(ln) not in lines_before]
     handles = [handles_by_key[k] for k, _scfg, _arr in series_list if k in handles_by_key]
     if not handles:
         plt.close(fig)
@@ -1037,37 +1192,14 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
     mean_line = _draw_mean_rain_line(axis_map, city, cfg)
     if mean_line is not None and str(mean_line.get_label() or "").strip():
         handles.append(mean_line)
-    # ---- 极值标注 ----
-    acfg = fig_cfg.get("annotation") or {}
-    if acfg.get("show_extremes"):
-        target_key = normalize_series_key(str(acfg.get("series", "meanTemp")))
-        arr = None
-        for k, s, v in series_list:
-            if k == target_key:
-                arr = v
-                break
-        if arr is not None and np.isfinite(arr).any():
-            finite = np.where(np.isfinite(arr), arr, np.nan)
-            hi_i = int(np.nanargmax(finite))
-            lo_i = int(np.nanargmin(finite))
-            labels = city.month_labels(str(cfg["data"].get("month_label_style", "1月")))
-            for idx, tag in ((hi_i, "最高"), (lo_i, "最低")):
-                text = f"{labels[idx]} {tag}"
-                if acfg.get("show_value", True):
-                    text += f" {float(arr[idx]):.1f}"
-                ax.annotate(
-                    text, xy=(x[idx], arr[idx]), xytext=(0, 16 if tag == "最高" else -22),
-                    textcoords="offset points", ha="center", fontsize=float(acfg.get("fontsize", 9)),
-                    color=str(acfg.get("color", "#a32d2d")), zorder=9,
-                    arrowprops={"arrowstyle": "-", "color": str(acfg.get("color", "#a32d2d")),
-                                "linewidth": 0.8},
-                )
 
     context = _context(city, cfg)
     _add_titles(ax, city, cfg, context)
     _add_legend(ax, handles, cfg)
     _add_credit(fig, cfg, context)
     _apply_layout(fig, cfg)
+    # 极值标注放在布局定型之后：避让判定要用坐标区的最终矩形
+    _draw_extremes_annotations(ax, city, cfg, x, series_list, data_lines, mean_line)
     return _save(fig, out_paths, cfg)
 
 

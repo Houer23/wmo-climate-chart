@@ -18,6 +18,9 @@ import sys
 import traceback
 from pathlib import Path
 
+import numpy as np
+from matplotlib.text import Text
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -453,6 +456,129 @@ def _band_colors(cfg, city_obj) -> dict:
     return slots
 
 
+def city_any(city_id: int):
+    """夹具优先，其次 samples（个别城市只在 samples 里有）。"""
+    for path in (FIXTURES / f"{city_id}_zh.json", FIXTURES / "samples" / f"{city_id}.json"):
+        if path.exists():
+            return parse_city_text(path.read_text(encoding="utf-8"),
+                                   city_id=city_id, lang="zh")
+    raise FileNotFoundError(city_id)
+
+
+def _extreme_overlaps(fig) -> list:
+    """极值标注的问题清单：压曲线 / 压平均降水线 / 两标注互压 / 横向越界。
+
+    判定用「纯文字盒 + 2pt 间隙」对折线点云做命中测试，与绘制实现同一套几何。
+    """
+    from src import chart as chart_mod
+
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    ax = fig.axes[0]
+    annos = [t for a in fig.axes for t in a.texts
+             if "最高" in t.get_text() or "最低" in t.get_text()]
+    if len(annos) < 2:
+        return []
+    annos.sort(key=lambda t: 0 if "最高" in t.get_text() else 1)
+    raw = [Text.get_window_extent(t, renderer) for t in annos]
+    boxes = [chart_mod._grow_box(b, 4.0) for b in raw]
+    clouds = []
+    for axis in fig.axes:
+        for ln in axis.lines:
+            if str(ln.get_color()) == "#c9d3dd" and ln.get_label() != "平均降水":
+                continue                                  # 网格线不算障碍
+            pts = np.asarray(ln.get_xydata(), dtype=float)
+            if pts.size:
+                clouds.append(chart_mod._densify(ln.get_transform().transform(pts)))
+    notes = [tag for tag, box in zip(("最高", "最低"), boxes)
+             if any(chart_mod._cloud_hits_box(pts, box) for pts in clouds)]
+    if (boxes[0].x0 < boxes[1].x1 and boxes[1].x0 < boxes[0].x1
+            and boxes[0].y0 < boxes[1].y1 and boxes[1].y0 < boxes[0].y1):
+        notes.append("两标注互压")
+    ab = ax.get_window_extent()
+    if any(b.x0 < ab.x0 or b.x1 > ab.x1 for b in raw):     # 越界看裸文字盒
+        notes.append("横向越界")
+    return notes
+
+
+def _extreme_case(city_id: int, **over):
+    """渲染并返回 (问题清单, [最高偏移, 最低偏移])。"""
+    from src import chart as chart_mod
+
+    sets = [("figure.mean_rain_line.show", True),
+            ("figure.annotation.show_extremes", True)] + list(over.items())
+    cfg = load_config("seasonal", None, sets)
+    fig = _render_figure(cfg, city_any(city_id))
+    notes = _extreme_overlaps(fig)
+    annos = sorted([t for a in fig.axes for t in a.texts
+                    if "最高" in t.get_text() or "最低" in t.get_text()],
+                   key=lambda t: 0 if "最高" in t.get_text() else 1)
+    offs = [[round(float(v), 1) for v in t.xyann] for t in annos]
+    chart_mod.plt.close(fig)
+    return notes, offs
+
+
+def test_extremes_label_avoidance() -> None:
+    """最高/最低气温标注自动避让：不压曲线/平均降水线，无事则原地不动。"""
+    # 1) 关闭避让时，这几个城市确实压线（同时也是对本测试判定逻辑的自检）
+    baseline = {cid: _extreme_case(cid, **{"figure.annotation.avoid_overlap": False})[0]
+                for cid in (237, 1007, 1, 2034)}
+    check("关闭避让时北京/新西伯利亚/香港/圣保罗存在压线",
+          all(baseline[cid] for cid in (237, 1007, 1, 2034)), str(baseline))
+
+    # 2) 开启避让（默认）后不再压线
+    for cid in (237, 1007, 1, 2034, 2150):
+        notes, offs = _extreme_case(cid)
+        check(f"cityId {cid} 极值标注避让后无压线", notes == [], f"{notes} 偏移={offs}")
+        check(f"cityId {cid} 仍保持高低分居两侧",
+              offs[0][1] > 0 > offs[1][1], str(offs))
+
+    # 3) 本来就不撞的城市保持原偏移（不乱动）
+    for cid in (156, 2184):
+        notes, offs = _extreme_case(cid)
+        check(f"cityId {cid} 无冲突时不移动", offs == [[0.0, 16.0], [0.0, -22.0]],
+              f"{offs} {notes}")
+
+    # 4) 关闭避让后完全回到固定偏移
+    notes, offs = _extreme_case(237, **{"figure.annotation.avoid_overlap": False})
+    check("avoid_overlap=false 恢复固定偏移", offs == [[0.0, 16.0], [0.0, -22.0]],
+          str(offs))
+    check("avoid_overlap=false 时确实压线（说明它真的没被移动）", notes != [], str(notes))
+
+    # 5) allow_flip=false 时仍留在偏好侧
+    notes, offs = _extreme_case(1007, **{"figure.annotation.allow_flip": False})
+    check("allow_flip=false 时仍分居两侧", offs[0][1] > 0 > offs[1][1], str(offs))
+
+    # 6) max_distance 限制搜索半径
+    _notes, offs = _extreme_case(1007, **{"figure.annotation.max_distance": 20.0})
+    check("max_distance 限制外推距离",
+          all(abs(v) <= 20.0 for o in offs for v in o), str(offs))
+
+    # 7) gap 放大后仍不压线
+    notes, _offs = _extreme_case(237, **{"figure.annotation.gap": 10.0})
+    check("gap 放大后仍无压线", notes == [], str(notes))
+
+    # 8) 箭头锚点仍是原数据点（避让只动文字，不动指向）
+    from src import chart as chart_mod
+    cfg = load_config("seasonal", None, [("figure.annotation.show_extremes", True)])
+    bei = city(237)
+    fig = _render_figure(cfg, bei)
+    annos = [t for a in fig.axes for t in a.texts
+             if "最高" in t.get_text() or "最低" in t.get_text()]
+    values = bei.values("meanTemp")
+    hi = max(range(len(values)), key=lambda i: values[i])
+    lo = min(range(len(values)), key=lambda i: values[i])
+    hi_anno = [a for a in annos if "最高" in a.get_text()][0]
+    lo_anno = [a for a in annos if "最低" in a.get_text()][0]
+    check("最高标注锚点=最高月数据点",
+          abs(hi_anno.xy[0] - hi) < 1e-6 and abs(hi_anno.xy[1] - values[hi]) < 1e-6,
+          str(hi_anno.xy))
+    check("最低标注锚点=最低月数据点",
+          abs(lo_anno.xy[0] - lo) < 1e-6 and abs(lo_anno.xy[1] - values[lo]) < 1e-6,
+          str(lo_anno.xy))
+    chart_mod.plt.close(fig)
+
+
 def _horizontal_lines(fig) -> list:
     """所有水平常量线 (所在坐标轴, Line2D)；axhline 生成的两点同值线。"""
     found = []
@@ -883,6 +1009,7 @@ def main() -> int:
     run("绘图层：背景色带层级", test_background_bands_layering)
     run("绘图层：季节色带半球反季", test_seasonal_bands_hemisphere)
     run("绘图层：平均降水线", test_mean_rain_line)
+    run("绘图层：极值标注自动避让", test_extremes_label_avoidance)
     run("绘图层：多城市对比", test_compare_render)
     run("城市索引：反查与筛选", test_city_index_flatten)
 
