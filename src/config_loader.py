@@ -263,6 +263,23 @@ DEFAULTS: dict[str, Any] = {
             "linewidth": 0.8,
             "alpha": 0.8,
         },
+        "mean_rain_line": {                 # 平均降水线：12 个月降水量的平均水平线
+            "show": False,                  # 默认不画，需显式置 true
+            "axis": "auto",                 # auto = 跟随 rainfall 元素所在的轴
+            "color": "auto",                # auto = 跟随 rainfall 元素的颜色
+            "linestyle": "--",
+            "linewidth": 1.4,
+            "alpha": 1.0,
+            "zorder": 3,                    # 高于降水柱（2），不会被柱子盖住
+            "label": "平均降水",             # 空字符串 = 不进图例
+            "annotate": True,               # 是否在线上标注平均值
+            "annotate_template": "{label} {value:.1f} {unit}",
+            "annotate_color": "auto",       # auto = 沿用线色
+            "annotate_position": "right",    # left | center | right | ticks（ticks = 贴该轴刻度标签列）
+            "annotate_side": "above",        # above | below | center（贴线上方/下方/垂直居中于线）
+            "annotate_offset": [0.0, 4.0],   # 点偏移 [dx, dy]：dx 右为正；dy 取非负，方向由 side 决定
+            "annotate_fontsize": 9.0,
+        },
         "annotation": {
             "show_extremes": False,         # 标注最高/最低月
             "series": "meanTemp",
@@ -795,6 +812,21 @@ def validate_config(cfg: dict[str, Any]) -> list[str]:
     if hemisphere not in ("auto", "north", "south"):
         raise ConfigError("figure.background.bands.hemisphere 只能是 auto / north / south"
                           f"（当前：{bands.get('hemisphere')}）")
+
+    line_axis = str((cfg["figure"].get("mean_rain_line") or {}).get("axis", "auto")).lower()
+    if line_axis not in ("auto", "primary", "secondary", "tertiary"):
+        raise ConfigError("figure.mean_rain_line.axis 只能是 auto / primary / secondary / tertiary"
+                          f"（当前：{(cfg['figure'].get('mean_rain_line') or {}).get('axis')}）")
+
+    line_cfg = cfg["figure"].get("mean_rain_line") or {}
+    line_pos = str(line_cfg.get("annotate_position", "right")).lower()
+    if line_pos not in ("left", "center", "right", "ticks"):
+        raise ConfigError("figure.mean_rain_line.annotate_position 只能是 left / center / right / ticks"
+                          f"（当前：{line_cfg.get('annotate_position')}）")
+    line_side = str(line_cfg.get("annotate_side", "above")).lower()
+    if line_side not in ("above", "below", "center"):
+        raise ConfigError("figure.mean_rain_line.annotate_side 只能是 above / below / center"
+                          f"（当前：{line_cfg.get('annotate_side')}）")
 
     return warnings
 

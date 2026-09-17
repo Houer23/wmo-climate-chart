@@ -156,6 +156,18 @@
 | `background.bands.seasons` | array | 冬春夏秋 | 每项 `{name, months:[...], color}`，月份可跨年（如冬 = [12,1,2]）；按**北半球惯例**声明，南半球城市由 `hemisphere` 自动平移半年 |
 | `zeroline.show` | bool | `false` | 是否画 0 基准线 |
 | `zeroline.color` / `linestyle` / `linewidth` / `alpha` | — | `#8899aa` / `-` / `0.8` / `0.8` | 基准线样式 |
+| `mean_rain_line.show` | bool | `false` | **是否画平均降水线**（12 个月降水量的平均水平线）；默认关闭，需显式置 `true`。取值只看该城市有无降水数据，与 `series.rainfall` 是否绘制无关；缺测月不计入，全缺则不画 |
+| `mean_rain_line.axis` | str | `"auto"` | 画在哪个纵轴：`auto` = 跟随 `series.rainfall.axis` / `primary` / `secondary` / `tertiary` |
+| `mean_rain_line.color` | str | `"auto"` | 线色：`auto` = 跟随 `series.rainfall.color` |
+| `mean_rain_line.linestyle` / `linewidth` / `alpha` / `zorder` | — | `--` / `1.4` / `1.0` / `3` | 线型、线宽、透明度、层级（默认高于降水柱，不会被柱子盖住） |
+| `mean_rain_line.label` | str | `"平均降水"` | 图例文案；空字符串 = 不进图例 |
+| `mean_rain_line.annotate` | bool | `true` | 是否在线上标注平均值 |
+| `mean_rain_line.annotate_template` | str 模板 | `"{label} {value:.1f} {unit}"` | 标注文本模板，占位符 `{label}` / `{value}` / `{unit}` / `{city}` / `{station}` |
+| `mean_rain_line.annotate_color` | str | `"auto"` | 标注文字颜色：`auto` = 沿用线色；也可给具体色值（只改标注，不动线） |
+| `mean_rain_line.annotate_position` | str | `"right"` | 标注横向锚点：`left` / `center` / `right`（对应绘图区左边缘 / 中线 / 右边缘，文字随之左对齐 / 居中 / 右对齐），或 `ticks` = **贴到该纵轴刻度标签那一列**（自动量取"向外刻度长度 + tick_pad"，与画布尺寸、字号、文案长度无关；刻度在左侧时自动镜像为右对齐） |
+| `mean_rain_line.annotate_side` | str | `"above"` | 标注与均值线的纵向关系：`above`（文字底边高出线 dy 点）/ `below`（文字顶边低于线 dy 点）/ `center`（文字**垂直中心正落在线上**，此时 offset 的纵向分量不生效）。**自动避让**：若文字与该纵轴刻度标签撞上（横向同列且纵向间隙不足 2pt），会自动向上或向下让开，取「位移较小、且尽量不越出绘图区」的方向，让开后保证 ≥2pt 间隙 |
+| `mean_rain_line.annotate_offset` | [dx, dy] | `[0, 4]` | 点偏移微调：`dx` 向右为正；`dy` 取非负数，**方向由 `annotate_side` 决定**（默认 4 pt 离开线） |
+| `mean_rain_line.annotate_fontsize` | float | `9.0` | 标注字号 |
 | `annotation.show_extremes` | bool | `false` | 是否标注极值月 |
 | `annotation.series` | str | `"meanTemp"` | 标注哪个元素的极值 |
 | `annotation.fontsize` / `color` / `show_value` | — | `9` / `#a32d2d` / `true` | 标注样式 |

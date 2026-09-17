@@ -453,6 +453,297 @@ def _band_colors(cfg, city_obj) -> dict:
     return slots
 
 
+def _horizontal_lines(fig) -> list:
+    """所有水平常量线 (所在坐标轴, Line2D)；axhline 生成的两点同值线。"""
+    found = []
+    for axis in fig.axes:
+        for line in axis.lines:
+            ys = list(line.get_ydata())
+            if len(ys) == 2 and ys[0] == ys[1]:
+                found.append((axis, line))
+    return found
+
+
+def _legend_labels(fig) -> list:
+    """图例文案（含轴级图例与画布级图例）。"""
+    legends = list(fig.legends) + [a.get_legend() for a in fig.axes if a.get_legend() is not None]
+    return [t.get_text() for lg in legends for t in lg.get_texts()]
+
+
+def test_mean_rain_line() -> None:
+    """平均降水线：默认不画；显式开启后按 12 个月降水均值画一条水平线。"""
+    from src import chart as chart_mod
+
+    beijing = city(237)
+    expect_mm = sum(v for v in beijing.values("rainfall") if v is not None) / 12.0
+
+    # 1) 默认关闭：不产生该元素，也不进图例
+    check("默认配置 mean_rain_line.show 为 false",
+          load_config(None)["figure"]["mean_rain_line"]["show"] is False)
+    fig = _render_figure(load_config(None), beijing)
+    check("默认配置不画平均降水线",
+          not any(ln.get_color() == "#46cbd4" for _a, ln in _horizontal_lines(fig)),
+          str([ln.get_color() for _a, ln in _horizontal_lines(fig)]))
+    check("默认配置图例无平均降水",
+          not any("平均降水" in t for t in _legend_labels(fig)), str(_legend_labels(fig)))
+    chart_mod.plt.close(fig)
+
+    # 2) 显式开启
+    cfg = load_config(None, None, [("figure.mean_rain_line.show", True)])
+    fig = _render_figure(cfg, beijing)
+    hits = [(a, ln) for a, ln in _horizontal_lines(fig) if ln.get_label() == "平均降水"]
+    check("开启后画出平均降水线", len(hits) == 1, str(len(hits)))
+    if hits:
+        axis, line = hits[0]
+        check("平均降水线取值 = 12 个月均值",
+              abs(float(line.get_ydata()[0]) - expect_mm) < 1e-6,
+              f"{line.get_ydata()[0]} != {expect_mm}")
+        check("平均降水线画在降水柱所在轴", len(axis.patches) > 0,
+              f"该轴 patch 数 {len(axis.patches)}")
+        check("颜色跟随 rainfall 元素", line.get_color() == "#46cbd4", line.get_color())
+        check("线型为虚线", line.get_linestyle() == "--", line.get_linestyle())
+    check("平均降水线进入图例",
+          any("平均降水" in t for t in _legend_labels(fig)), str(_legend_labels(fig)))
+    texts = [t.get_text() for a in fig.axes for t in a.texts]
+    check("线上标注均值与单位", any(f"{expect_mm:.1f}" in t and "毫米" in t for t in texts),
+          str(texts))
+    annot = [t for a in fig.axes for t in a.texts if "平均降水" in t.get_text()]
+    check("标注颜色默认沿用线色",
+          bool(annot) and annot[0].get_color() == "#46cbd4",
+          str(annot[0].get_color() if annot else None))
+    check("标注默认贴右上（ha=right / va=bottom / 偏移 0,4）",
+          bool(annot) and annot[0].get_ha() == "right" and annot[0].get_va() == "bottom"
+          and list(annot[0].xyann) == [0.0, 4.0],
+          str((annot[0].get_ha(), annot[0].get_va(), list(annot[0].xyann)) if annot else None))
+    chart_mod.plt.close(fig)
+
+    # 2c) 标注位置可调：贴左端 + 线下方
+    cfg = load_config(None, None, [("figure.mean_rain_line.show", True),
+                                   ("figure.mean_rain_line.annotate_position", "left"),
+                                   ("figure.mean_rain_line.annotate_side", "below"),
+                                   ("figure.mean_rain_line.annotate_offset", [2.0, 6.0])])
+    fig = _render_figure(cfg, beijing)
+    fig.canvas.draw()
+    annot = [t for a in fig.axes for t in a.texts if "平均降水" in t.get_text()][0]
+    check("annotate_position=left 时左对齐且 dy 取负",
+          annot.get_ha() == "left" and annot.get_va() == "top"
+          and list(annot.xyann) == [2.0, -6.0],
+          str((annot.get_ha(), annot.get_va(), list(annot.xyann))))
+    axis_bbox = annot.axes.get_window_extent()
+    text_bbox = annot.get_window_extent(fig.canvas.get_renderer())
+    expect_x0 = axis_bbox.x0 + 2.0 * fig.dpi / 72       # 左边缘 + dx(2pt)
+    check("标注左边缘 = 绘图区左边缘 + dx",
+          abs(text_bbox.x0 - expect_x0) < 1.0,
+          f"文本 x0={text_bbox.x0:.1f} 期望 {expect_x0:.1f}")
+    line_y = annot.axes.transData.transform(
+        (0, float([ln for _a, ln in _horizontal_lines(fig)
+                   if ln.get_label() == "平均降水"][0].get_ydata()[0])))[1]
+    check("annotate_side=below 时文字整体落在线下方",
+          text_bbox.y1 <= line_y, f"文本 y1={text_bbox.y1:.1f} 线 y={line_y:.1f}")
+    chart_mod.plt.close(fig)
+
+    # 2d) annotate_position=ticks：横向贴副轴刻度标签列，纵向仍沿用 side+offset
+    cfg = load_config(None, None, [("figure.mean_rain_line.show", True),
+                                   ("figure.mean_rain_line.annotate_position", "ticks")])
+    fig = _render_figure(cfg, beijing)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    ax2 = [a for a in fig.axes if any(p.get_zorder() >= 2 for p in a.patches)][0]
+    tick_boxes = [t.get_window_extent(renderer)
+                  for t in ax2.yaxis.get_majorticklabels() if t.get_text().strip()]
+    anno = [t for a in fig.axes for t in a.texts if "平均降水" in t.get_text()][0]
+    text_box = anno.get_window_extent(renderer)
+    check("ticks 模式与刻度标签左边缘对齐",
+          abs(text_box.x0 - min(b.x0 for b in tick_boxes)) < 1.0,
+          f"标注 x0={text_box.x0:.1f} 刻度 x0={min(b.x0 for b in tick_boxes):.1f}")
+    check("ticks 模式把标注推到绘图区之外",
+          text_box.x0 > ax2.get_window_extent().x1,
+          f"标注 x0={text_box.x0:.1f} 轴右边缘={ax2.get_window_extent().x1:.1f}")
+    check("ticks 模式横向偏移与 ha/va 规则不变",
+          anno.get_ha() == "left" and anno.get_va() == "bottom"
+          and float(anno.xyann[0]) == 7.5,
+          str((anno.get_ha(), anno.get_va(), list(anno.xyann))))
+    check("ticks 模式与刻度标签纵向不再重叠（自动避让）",
+          not any(b.y1 > text_box.y0 and b.y0 < text_box.y1
+                  and b.x1 > text_box.x0 and b.x0 < text_box.x1 for b in tick_boxes),
+          f"标注 y {text_box.y0:.1f}..{text_box.y1:.1f} 刻度 "
+          f"{[(round(b.y0, 1), round(b.y1, 1)) for b in tick_boxes]}")
+    check("ticks 模式确实触发了避让（纵向不再是基准 4pt）",
+          abs(float(anno.xyann[1]) - 4.0) > 0.5, str(list(anno.xyann)))
+    chart_mod.plt.close(fig)
+
+    # 2e) ticks 模式在刻度位于左侧时自动镜像
+    cfg = load_config(None, None, [("figure.mean_rain_line.show", True),
+                                   ("figure.mean_rain_line.annotate_position", "ticks"),
+                                   ("axes_secondary.side", "left")])
+    fig = _render_figure(cfg, beijing)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    ax2 = [a for a in fig.axes if any(p.get_zorder() >= 2 for p in a.patches)][0]
+    tick_boxes = [t.get_window_extent(renderer)
+                  for t in ax2.yaxis.get_majorticklabels() if t.get_text().strip()]
+    anno = [t for a in fig.axes for t in a.texts if "平均降水" in t.get_text()][0]
+    text_box = anno.get_window_extent(renderer)
+    check("ticks 模式在刻度居左时右对齐到刻度列右边缘",
+          anno.get_ha() == "right"
+          and abs(text_box.x1 - max(b.x1 for b in tick_boxes)) < 1.0,
+          f"ha={anno.get_ha()} 标注 x1={text_box.x1:.1f} "
+          f"刻度 x1={max(b.x1 for b in tick_boxes):.1f}")
+    check("ticks 模式在刻度居左时刻度列位于绘图区左侧",
+          text_box.x1 < ax2.get_window_extent().x0,
+          f"标注 x1={text_box.x1:.1f} 轴左边缘={ax2.get_window_extent().x0:.1f}")
+    check("ticks 模式刻度居左时同样避让刻度标签",
+          not any(b.y1 > text_box.y0 and b.y0 < text_box.y1
+                  and b.x1 > text_box.x0 and b.x0 < text_box.x1 for b in tick_boxes),
+          f"标注 y {text_box.y0:.1f}..{text_box.y1:.1f}")
+    chart_mod.plt.close(fig)
+
+    # 2g) annotate_side=center：文字垂直中心落在均值线上（绘图区内，无刻度标签需要避让）
+    cfg = load_config(None, None, [("figure.mean_rain_line.show", True),
+                                   ("figure.mean_rain_line.annotate_position", "right"),
+                                   ("figure.mean_rain_line.annotate_side", "center")])
+    fig = _render_figure(cfg, beijing)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    ax2 = [a for a in fig.axes if any(p.get_zorder() >= 2 for p in a.patches)][0]
+    anno = [t for a in fig.axes for t in a.texts if "平均降水" in t.get_text()][0]
+    text_box = anno.get_window_extent(renderer)
+    line_y = ax2.transData.transform((0, expect_mm))[1]
+    check("annotate_side=center 时文字中心落在均值线上",
+          anno.get_va() == "center"
+          and abs((text_box.y0 + text_box.y1) / 2 - line_y) < 1.0,
+          f"va={anno.get_va()} 文字中心={(text_box.y0 + text_box.y1) / 2:.1f} 线 y={line_y:.1f}")
+    check("annotate_side=center 时 offset 纵向分量不生效",
+          list(anno.xyann) == [0.0, 0.0], str(list(anno.xyann)))
+    check("绘图区内且不相撞时不做任何避让",
+          abs((text_box.y0 + text_box.y1) / 2 - line_y) < 1.0, "")
+
+    # 2h) center 与 ticks 叠加：居中让位于"不压刻度标签"，横向仍贴列
+    cfg = load_config(None, None, [("figure.mean_rain_line.show", True),
+                                   ("figure.mean_rain_line.annotate_position", "ticks"),
+                                   ("figure.mean_rain_line.annotate_side", "center")])
+    fig = _render_figure(cfg, beijing)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    ax2 = [a for a in fig.axes if any(p.get_zorder() >= 2 for p in a.patches)][0]
+    tick_boxes = [t.get_window_extent(renderer)
+                  for t in ax2.yaxis.get_majorticklabels() if t.get_text().strip()]
+    anno = [t for a in fig.axes for t in a.texts if "平均降水" in t.get_text()][0]
+    text_box = anno.get_window_extent(renderer)
+    line_y = ax2.transData.transform((0, expect_mm))[1]
+    check("center + ticks：横向仍贴刻度列",
+          abs(text_box.x0 - min(b.x0 for b in tick_boxes)) < 1.0,
+          f"标注 x0={text_box.x0:.1f} 刻度 x0={min(b.x0 for b in tick_boxes):.1f}")
+    check("center + ticks：避让优先，纵向不再与刻度标签重叠",
+          not any(b.y1 > text_box.y0 and b.y0 < text_box.y1
+                  and b.x1 > text_box.x0 and b.x0 < text_box.x1 for b in tick_boxes),
+          f"标注 y {text_box.y0:.1f}..{text_box.y1:.1f}")
+    check("center + ticks：让位后中心不再与均值线重合（避让代价）",
+          abs((text_box.y0 + text_box.y1) / 2 - line_y) > 1.0,
+          f"中心={(text_box.y0 + text_box.y1) / 2:.1f} 线 y={line_y:.1f}")
+    chart_mod.plt.close(fig)
+
+    # 2f) 换画布尺寸仍严格对齐（偏移以点为单位，与布局无关）
+    cfg = load_config(None, None, [("figure.mean_rain_line.show", True),
+                                   ("figure.mean_rain_line.annotate_position", "ticks"),
+                                   ("figure.figsize", [16.0, 8.0])])
+    fig = _render_figure(cfg, beijing)
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    ax2 = [a for a in fig.axes if any(p.get_zorder() >= 2 for p in a.patches)][0]
+    tick_boxes = [t.get_window_extent(renderer)
+                  for t in ax2.yaxis.get_majorticklabels() if t.get_text().strip()]
+    anno = [t for a in fig.axes for t in a.texts if "平均降水" in t.get_text()][0]
+    text_box = anno.get_window_extent(renderer)
+    check("ticks 模式换 16x8 画布仍与刻度列对齐",
+          abs(text_box.x0 - min(b.x0 for b in tick_boxes)) < 1.0,
+          f"标注 x0={text_box.x0:.1f} 刻度 x0={min(b.x0 for b in tick_boxes):.1f}")
+    chart_mod.plt.close(fig)
+
+    # 2b) 标注颜色可独立于线色
+    cfg = load_config(None, None, [("figure.mean_rain_line.show", True),
+                                   ("figure.mean_rain_line.annotate_color", "#a32d2d")])
+    fig = _render_figure(cfg, beijing)
+    annot = [t for a in fig.axes for t in a.texts if "平均降水" in t.get_text()]
+    check("annotate_color 生效",
+          bool(annot) and annot[0].get_color() == "#a32d2d",
+          str(annot[0].get_color() if annot else None))
+    hits = [ln for _a, ln in _horizontal_lines(fig) if ln.get_label() == "平均降水"]
+    check("改标注颜色不影响线色",
+          bool(hits) and hits[0].get_color() == "#46cbd4",
+          str(hits[0].get_color() if hits else None))
+    chart_mod.plt.close(fig)
+
+    # 3) label 置空：仍画线，但不进图例
+    cfg = load_config(None, None, [("figure.mean_rain_line.show", True),
+                                   ("figure.mean_rain_line.label", "")])
+    fig = _render_figure(cfg, beijing)
+    check("label 为空时仍画线",
+          any(abs(float(ln.get_ydata()[0]) - expect_mm) < 1e-6
+              for _a, ln in _horizontal_lines(fig)), "")
+    check("label 为空时不进图例",
+          not any("平均降水" in t for t in _legend_labels(fig)), str(_legend_labels(fig)))
+    chart_mod.plt.close(fig)
+
+    # 4) 降水全缺的城市：不画（也不报错）
+    tuli = city(500)
+    fig = _render_figure(load_config(None, None, [("figure.mean_rain_line.show", True)]), tuli)
+    check("降水全缺时不画平均降水线",
+          not any(ln.get_label() == "平均降水" for _a, ln in _horizontal_lines(fig)))
+    chart_mod.plt.close(fig)
+
+    # 5) 英制单位：均值随之换算，标注文案用英寸
+    cfg_in = load_config("fahrenheit", None, [("figure.mean_rain_line.show", True)])
+    expect_in = expect_mm / 25.4
+    fig = _render_figure(cfg_in, beijing)
+    hits = [ln for _a, ln in _horizontal_lines(fig) if ln.get_label() == "平均降水"]
+    check("英制配置下均值为英寸",
+          bool(hits) and abs(float(hits[0].get_ydata()[0]) - expect_in) < 1e-6,
+          str(hits[0].get_ydata()[0] if hits else None))
+    check("英制配置下标注写英寸",
+          any("英寸" in t.get_text() for a in fig.axes for t in a.texts))
+    chart_mod.plt.close(fig)
+
+    # 6) axis=auto 跟随 rainfall 元素所在轴（rain_only 把降水放在主轴）
+    cfg_rain = load_config("rain_only", None, [("figure.mean_rain_line.show", True)])
+    fig = _render_figure(cfg_rain, beijing)
+    hits = [(a, ln) for a, ln in _horizontal_lines(fig) if ln.get_label() == "平均降水"]
+    check("rain_only 下平均降水线落在主轴",
+          bool(hits) and hits[0][0] is fig.axes[0], f"axes={[fig.axes.index(a) for a, _ in hits]}")
+    check("rain_only 下颜色跟随该配置的 rainfall 颜色",
+          bool(hits) and hits[0][1].get_color() == "#4a9fd8",
+          str(hits[0][1].get_color() if hits else None))
+    chart_mod.plt.close(fig)
+
+    # 7) 非法 axis 被校验拦下
+    bad = load_config(None)
+    bad["figure"]["mean_rain_line"]["axis"] = "upside"
+    try:
+        validate_config(bad)
+    except ConfigError as exc:
+        check("非法 mean_rain_line.axis 报错", "mean_rain_line" in str(exc), str(exc))
+    else:
+        check("非法 mean_rain_line.axis 报错", False, "未抛出")
+
+    bad = load_config(None)
+    bad["figure"]["mean_rain_line"]["annotate_position"] = "middle"
+    try:
+        validate_config(bad)
+    except ConfigError as exc:
+        check("非法 annotate_position 报错", "annotate_position" in str(exc), str(exc))
+    else:
+        check("非法 annotate_position 报错", False, "未抛出")
+
+    bad = load_config(None)
+    bad["figure"]["mean_rain_line"]["annotate_side"] = "left"
+    try:
+        validate_config(bad)
+    except ConfigError as exc:
+        check("非法 annotate_side 报错", "annotate_side" in str(exc), str(exc))
+    else:
+        check("非法 annotate_side 报错", False, "未抛出")
+
+
 def test_seasonal_bands_hemisphere() -> None:
     """季节色带按半球自动反季：南半球城市冬夏、春秋互换。"""
     winter, spring, summer, autumn = "#4a6fa5", "#6aa84f", "#e69138", "#a64d79"
@@ -591,6 +882,7 @@ def main() -> int:
     run("绘图层：元素全部关闭", test_series_toggle)
     run("绘图层：背景色带层级", test_background_bands_layering)
     run("绘图层：季节色带半球反季", test_seasonal_bands_hemisphere)
+    run("绘图层：平均降水线", test_mean_rain_line)
     run("绘图层：多城市对比", test_compare_render)
     run("城市索引：反查与筛选", test_city_index_flatten)
 

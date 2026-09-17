@@ -446,6 +446,177 @@ def _draw_zeroline(ax, cfg: dict[str, Any]) -> None:
                alpha=float(zcfg.get("alpha", 0.8)), zorder=1)
 
 
+def _rain_unit_text(city: CityClimate, cfg: dict[str, Any]) -> str:
+    """降水单位文案：配置切到英寸时用英寸，否则沿用数据源自带单位（与表格口径一致）。"""
+    if (cfg["data"].get("rain_unit") or "mm").lower() == "inch":
+        return "英寸"
+    return city.rain_unit_label()
+
+
+def _mean_rainfall(city: CityClimate, cfg: dict[str, Any]) -> Optional[float]:
+    """12 个月降水量的平均值（当前降水单位；缺测月不计入；全缺返回 None）。
+
+    与柱状图保持同一刻度空间：套用 ``series.rainfall.scale_factor``。
+    """
+    rain_unit = (cfg["data"].get("rain_unit") or "mm").lower()
+    values = [v for v in city.values("rainfall", rain_unit=rain_unit) if v is not None]
+    if not values:
+        return None
+    scale = float(((cfg.get("series") or {}).get("rainfall") or {}).get("scale_factor", 1.0) or 1.0)
+    return sum(values) / len(values) * scale
+
+
+def _tick_label_column(ax) -> tuple[float, str, float]:
+    """量出该轴**刻度标签所在列**：返回 (轴比例锚点, 文字水平对齐, 相对轴边缘的点偏移)。
+
+    刻度标签边缘距轴边缘 = 向外的刻度长度 + ``tick_pad``（默认 4 + 3.5 = 7.5pt），
+    与画布尺寸、字号无关；这里用实测值而非固定常量，好让 ``tick_length`` /
+    ``tick_direction`` / 刻度左右侧切换后自动跟上。
+    """
+    on_left = str(ax.yaxis.get_ticks_position()).lower() == "left"
+    labels = [t for t in ax.yaxis.get_majorticklabels() if t.get_text().strip()]
+    if labels:
+        try:
+            fig = ax.get_figure()
+            renderer = fig.canvas.get_renderer()
+            boxes = [t.get_window_extent(renderer) for t in labels]
+            axes_box = ax.get_window_extent()
+            scale = 72.0 / float(fig.dpi)          # 像素 → 点，与最终输出 dpi 无关
+            if on_left:
+                return 0.0, "right", (max(b.x1 for b in boxes) - axes_box.x0) * scale
+            return 1.0, "left", (min(b.x0 for b in boxes) - axes_box.x1) * scale
+        except (AttributeError, IndexError, TypeError, ValueError):
+            pass                                    # 取不到渲染器时退回 tick_pad 估算
+    pad = 3.5
+    ticks = list(getattr(ax.yaxis, "majorTicks", []))
+    if ticks:
+        try:
+            pad = float(ticks[0].get_pad())
+        except (AttributeError, TypeError, ValueError):
+            pad = 3.5
+    return (0.0, "right", -pad) if on_left else (1.0, "left", pad)
+
+
+def _nudge_off_tick_labels(ax, anno, gap_pt: float = 2.0, passes: int = 3) -> float:
+    """让标注避开设在同一侧的纵轴刻度标签，返回实际施加的点偏移（正=向上、负=向下）。
+
+    只有当标注与刻度标签**横向也重叠**时才避让（标注留在绘图区内时天然安全）；
+    判定时已预留 ``gap_pt`` 间隙，因此"贴得很近但没压上"也会被让开；
+    每次取"刚好离开、且尽量不越出绘图区"的方向，位移量为离开所需最小值 + 该间隙。
+    """
+    try:
+        fig = ax.get_figure()
+        renderer = fig.canvas.get_renderer()
+        axes_box = ax.get_window_extent()
+        scale = 72.0 / float(fig.dpi)          # 像素 → 点，与最终输出 dpi 无关
+        boxes = [t.get_window_extent(renderer)
+                 for t in ax.yaxis.get_majorticklabels() if t.get_text().strip()]
+    except (AttributeError, IndexError, TypeError, ValueError):
+        return 0.0
+    if not boxes:
+        return 0.0
+
+    gap_px = gap_pt * float(fig.dpi) / 72.0
+    total = 0.0
+    for _ in range(passes):
+        try:
+            anno.update_positions(renderer)     # 与极值标注同理：先刷新文字变换再量
+            box = anno.get_window_extent(renderer)
+        except (AttributeError, IndexError, TypeError, ValueError):
+            break
+        # 纵向按"间隙"放宽判定：贴得比 gap 更近也算撞上，避免出现 0.x px 的贴合观感
+        hit = [b for b in boxes
+               if b.y1 + gap_px > box.y0 and b.y0 - gap_px < box.y1
+               and b.x1 > box.x0 and b.x0 < box.x1]
+        if not hit:
+            break
+        up = max(b.y1 for b in hit) - box.y0 + gap_px
+        down = box.y1 - min(b.y0 for b in hit) + gap_px
+
+        def crosses(shift: float) -> bool:
+            """位移后是否越出绘图区上下边界。"""
+            return box.y0 + shift < axes_box.y0 or box.y1 + shift > axes_box.y1
+
+        shift = min((up, -down), key=lambda s: (crosses(s), abs(s)))
+        anno.set_position((anno.xyann[0], anno.xyann[1] + shift * scale))
+        total += shift * scale
+    return total
+
+
+def _draw_mean_rain_line(axis_map: dict[str, Any], city: CityClimate,
+                         cfg: dict[str, Any]) -> Optional[Any]:
+    """平均降水线：把 12 个月降水量取平均，画一条水平参考线。
+
+    默认不绘制（``figure.mean_rain_line.show = false``），需在配置中显式开启。
+    画在降水柱所在的轴（``axis=auto`` 跟随 ``series.rainfall.axis``）且层级高于柱子，
+    因此不会被柱子盖住；该城市降水全缺或所在轴未启用时静默跳过。
+    """
+    mcfg = cfg["figure"].get("mean_rain_line") or {}
+    if not mcfg.get("show"):
+        return None
+    mean = _mean_rainfall(city, cfg)
+    if mean is None:
+        return None
+
+    axis_name = str(mcfg.get("axis", "auto") or "auto").lower()
+    if axis_name == "auto":
+        axis_name = str(((cfg.get("series") or {}).get("rainfall") or {})
+                        .get("axis", "secondary")).lower()
+    target = axis_map.get(axis_name)
+    if target is None:
+        return None
+
+    rain_cfg = (cfg.get("series") or {}).get("rainfall") or {}
+    color = _pick(mcfg.get("color"), _pick(rain_cfg.get("color"), "#46cbd4"))
+    zorder = float(mcfg.get("zorder", 3))
+    label = str(mcfg.get("label", "平均降水") or "")
+    line = target.axhline(
+        mean, color=color,
+        linestyle=str(mcfg.get("linestyle", "--")),
+        linewidth=float(mcfg.get("linewidth", 1.4)),
+        alpha=float(mcfg.get("alpha", 1.0)),
+        zorder=zorder, label=label or None,
+    )
+
+    if mcfg.get("annotate", True):
+        text = str(mcfg.get("annotate_template", "{label} {value:.1f} {unit}")).format(
+            label=label, value=mean, unit=_rain_unit_text(city, cfg),
+            city=city.city_name, station=city.station_name or city.city_name,
+        )
+        if text.strip():
+            # 落点：横向锚到绘图区左/中/右（轴宽比例），或 ``ticks`` 贴到该轴刻度标签那一列；
+            # 纵向锚到均值线：``above``/``below`` 把文字底/顶边离开线 dy 点，``center`` 则让
+            # 文字垂直中心正落在线上（此时 offset 的纵向分量不生效）。
+            position = str(mcfg.get("annotate_position", "right") or "right").lower()
+            if position not in ("left", "center", "right", "ticks"):
+                position = "right"
+            side = str(mcfg.get("annotate_side", "above") or "above").lower()
+            below, centered = side == "below", side == "center"
+            offset = mcfg.get("annotate_offset") or [0.0, 4.0]
+            try:
+                dx, dy = float(offset[0]), abs(float(offset[1]))
+            except (TypeError, ValueError, IndexError):
+                dx, dy = 0.0, 4.0
+            if position == "ticks":
+                x_frac, ha, dx_column = _tick_label_column(target)
+                dx += dx_column          # 横向落到刻度标签列；dx 仍可继续微调
+            else:
+                x_frac, ha = {"left": (0.0, "left"), "center": (0.5, "center"),
+                              "right": (1.0, "right")}[position]
+            anno = target.annotate(
+                text,
+                xy=(x_frac, mean), xycoords=("axes fraction", "data"),
+                xytext=(dx, 0.0 if centered else (-dy if below else dy)),
+                textcoords="offset points",
+                ha=ha, va="center" if centered else ("top" if below else "bottom"),
+                fontsize=float(mcfg.get("annotate_fontsize", 9.0)),
+                color=_pick(mcfg.get("annotate_color"), color),
+                zorder=zorder + 1, clip_on=False,
+            )
+            _nudge_off_tick_labels(target, anno)    # 与刻度标签撞上时自动上下让开
+    return line
+
+
 def _stack_axes(cfg: dict[str, Any], axis_map: dict[str, Any],
                 by_axis: dict[str, list[tuple[str, dict[str, Any], np.ndarray]]]) -> str:
     """调整各坐标轴的叠放层次，保证**折线始终绘制在柱状图之上**。
@@ -862,6 +1033,10 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
     ax.set_axisbelow(True)
     _draw_zeroline(ax, cfg)
 
+    # ---- 平均降水线（默认关闭，需 figure.mean_rain_line.show = true）----
+    mean_line = _draw_mean_rain_line(axis_map, city, cfg)
+    if mean_line is not None and str(mean_line.get_label() or "").strip():
+        handles.append(mean_line)
     # ---- 极值标注 ----
     acfg = fig_cfg.get("annotation") or {}
     if acfg.get("show_extremes"):
