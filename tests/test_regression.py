@@ -31,6 +31,7 @@ from src.city_index import CityIndex, CityEntry, _flatten  # noqa: E402
 from src.config_loader import (  # noqa: E402
     ConfigError,
     DEFAULTS,
+    apply_marks,
     dump_config,
     load_config,
     load_profiles_file,
@@ -1138,6 +1139,122 @@ def test_cli_batch_targets() -> None:
           seen == [[237, 1]] and code == 0, f"seen={seen} code={code}")
 
 
+def test_cli_mark() -> None:
+    """--mark/--m 绘图微调：档位、累计、封顶、大小写、告警不中断。"""
+    from src import chart as chart_mod
+
+    def marked(overrides, marks):
+        cfg = load_config(None, None, overrides)
+        notes, warns = apply_marks(cfg, marks)
+        return cfg, notes, warns
+
+    # ---- h / c：气温轴量程整体平移（上下限同向），累计封顶 ±3 档 ----
+    for token, shift in (("h", 10.0), ("hh", 20.0), ("hhh", 30.0),
+                         ("c", -10.0), ("cc", -20.0), ("ccc", -30.0)):
+        cfg, _, _ = marked([], [token])
+        check(f"{token}：气温轴 {shift:+g}", cfg["axes_primary"]["limit_shift"] == shift,
+              str(cfg["axes_primary"]["limit_shift"]))
+    cfg, _, warns = marked([], ["hhhh"])
+    check("hhhh 截取为 3 档并告警", cfg["axes_primary"]["limit_shift"] == 30.0
+          and any("最多" in w for w in warns), str(warns))
+    cfg, _, _ = marked([], ["h,c"])
+    check("h 与 c 相互抵消", cfg["axes_primary"]["limit_shift"] == 0.0,
+          str(cfg["axes_primary"]["limit_shift"]))
+    cfg, _, _ = marked([], ["h", "hh"])                     # 重复给出，档位累计
+    check("多个标记档位累计（h+hh=+30）", cfg["axes_primary"]["limit_shift"] == 30.0,
+          str(cfg["axes_primary"]["limit_shift"]))
+    cfg, _, _ = marked([("axes_primary.limit_shift", 5)], ["h"])
+    check("h 在既有 limit_shift 上累计", cfg["axes_primary"]["limit_shift"] == 15.0,
+          str(cfg["axes_primary"]["limit_shift"]))
+
+    # ---- r：降水轴上限档位（多数字相加、封顶 4000、保留现有下限） ----
+    for token, upper in (("r0", 50.0), ("r12", 250.0), ("r02", 200.0), ("r12345", 2050.0)):
+        cfg, _, _ = marked([], [token])
+        check(f"{token}：降水轴上限 {upper:g}",
+              cfg["axes_secondary"]["limit"] == [0.0, upper],
+              str(cfg["axes_secondary"]["limit"]))
+    cfg, _, warns = marked([], ["r12345", "r12345"])
+    check("r 档位相加封顶 4000 并告警", cfg["axes_secondary"]["limit"] == [0.0, 4000.0]
+          and any("截取" in w for w in warns), str(warns))
+    cfg, _, warns = marked([], ["r19"])
+    check("r 忽略 0-5 之外数字（r19=100）",
+          cfg["axes_secondary"]["limit"] == [0.0, 100.0] and warns, str(warns))
+    cfg, _, warns = marked([], ["r7"])
+    check("r 无有效档位只告警、不改配置",
+          cfg["axes_secondary"]["limit"] == [] and warns, str(warns))
+    cfg, _, _ = marked([("axes_secondary.limit", [20, 600])], ["r1"])
+    check("r 保留现有下限", cfg["axes_secondary"]["limit"] == [20.0, 100.0],
+          str(cfg["axes_secondary"]["limit"]))
+
+    # ---- ts / rs：刻度步长（小于量程 1/10 不生效） ----
+    cfg, notes, _ = marked([("axes_primary.limit", [-30, 30]),
+                            ("axes_secondary.limit", [0, 900])], ["ts10", "rs100"])
+    check("ts/rs 设置刻度步长",
+          cfg["axes_primary"]["tick_step"] == 10.0 and cfg["axes_secondary"]["tick_step"] == 100.0,
+          f"{cfg['axes_primary']['tick_step']} {cfg['axes_secondary']['tick_step']}")
+    cfg, notes, _ = marked([("axes_primary.limit", [-30, 30]),
+                            ("axes_secondary.limit", [0, 900])], ["ts5", "rs50"])
+    check("步长小于量程 1/10 时不生效",
+          cfg["axes_primary"]["tick_step"] is None and cfg["axes_secondary"]["tick_step"] is None,
+          f"{cfg['axes_primary']['tick_step']} {cfg['axes_secondary']['tick_step']}")
+    cfg, _, warns = marked([("axes_secondary.limit", [0, 900])], ["rs50"])
+    check("过密步长给出告警并说明下限",
+          any("过密" in w and "90" in w for w in warns), str(warns))
+    cfg, _, _ = marked([("axes_secondary.limit", [0, 900])], ["rs90", "rs91"])
+    check("步长等于量程 1/10 时生效（后值覆盖）",
+          cfg["axes_secondary"]["tick_step"] == 91.0, str(cfg["axes_secondary"]["tick_step"]))
+    cfg, _, warns = marked([("axes_primary.limit", [-30, 30])], ["ts0", "ts-3"])
+    check("步长须为正数，0/负数只告警",
+          cfg["axes_primary"]["tick_step"] is None and len(warns) == 2, str(warns))
+    cfg, notes, _ = marked([], ["ts10"])                # 自动量程：无法预判，照常写入并注明
+    check("自动量程时步长照常写入且注明未预判",
+          cfg["axes_primary"]["tick_step"] == 10.0
+          and any("未预判" in n for n in notes), f"{cfg['axes_primary']['tick_step']} {notes}")
+
+    # ---- t / p / tt：字号（tt0 隐藏标题） ----
+    cfg, _, _ = marked([], ["t14", "p12", "tt18"])
+    check("t/p/tt 字号生效",
+          cfg["axes_primary"]["label_fontsize"] == 14.0
+          and cfg["axes_secondary"]["label_fontsize"] == 12.0
+          and cfg["figure"]["title"]["fontsize"] == 18.0
+          and cfg["figure"]["title"]["show"] is True,
+          f"{cfg['axes_primary']['label_fontsize']} "
+          f"{cfg['axes_secondary']['label_fontsize']} {cfg['figure']['title']}")
+    cfg, _, _ = marked([], ["tt0"])
+    check("tt0 隐藏图表标题", cfg["figure"]["title"]["show"] is False
+          and cfg["figure"]["title"]["fontsize"] == 0.0, str(cfg["figure"]["title"]))
+    cfg, _, _ = marked([("figure.title.show", False)], ["tt18"])
+    check("tt>0 恢复显示标题", cfg["figure"]["title"]["show"] is True)
+    cfg, _, _ = marked([], ["T14", "P12"])                  # 大小写等价
+    check("字号标记大小写等价", cfg["axes_primary"]["label_fontsize"] == 14.0
+          and cfg["axes_secondary"]["label_fontsize"] == 12.0)
+
+    # ---- 无法识别的标记：只告警，不中断，不影响其余标记 ----
+    cfg, _, warns = marked([], ["hh", "x9", "r12", "z", "p20"])
+    check("无法识别的标记只告警",
+          any("x9" in w for w in warns) and any("z" in w for w in warns)
+          and cfg["axes_primary"]["limit_shift"] == 20.0
+          and cfg["axes_secondary"]["limit"] == [0.0, 250.0]
+          and cfg["axes_secondary"]["label_fontsize"] == 20.0,
+          str(warns))
+
+    # ---- 空白与逗号：去除所有空格，逗号分隔 ----
+    cfg, _, _ = marked([], [" h , r12 "])
+    check("逗号分隔且空格全去除", cfg["axes_primary"]["limit_shift"] == 10.0
+          and cfg["axes_secondary"]["limit"] == [0.0, 250.0],
+          f"{cfg['axes_primary']['limit_shift']} {cfg['axes_secondary']['limit']}")
+
+    # ---- 落到绘图：limit_shift 让自动量程整体平移 ----
+    base = _render_figure(load_config(None), city(237))
+    shifted = _render_figure(load_config(None, None, [("axes_primary.limit_shift", 10)]), city(237))
+    expected = [v + 10 for v in base.axes[0].get_ylim()]
+    check("limit_shift 使自动量程整体平移",
+          all(abs(a - b) < 1e-9 for a, b in zip(expected, shifted.axes[0].get_ylim())),
+          f"{base.axes[0].get_ylim()} -> {shifted.axes[0].get_ylim()}")
+    chart_mod.plt.close(base)
+    chart_mod.plt.close(shifted)
+
+
 def test_request_throttle() -> None:
     """批量请求排队限速：相邻网络请求间隔不小于 fetch.min_interval（默认 1 秒）。"""
     import shutil
@@ -1272,6 +1389,7 @@ def main() -> int:
     run("绘图层：多城市对比", test_compare_render)
     run("城市索引：反查与筛选", test_city_index_flatten)
     run("CLI：批量目标解析", test_cli_batch_targets)
+    run("CLI：--mark 绘图微调", test_cli_mark)
     run("请求层：批量排队限速", test_request_throttle)
 
     if "--network" in sys.argv:

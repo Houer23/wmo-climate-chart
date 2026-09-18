@@ -228,6 +228,7 @@ profiles:
 | `label_valign` | str | `"auto"` | 标题垂直基准：`auto` / `top` / `center` / `bottom`（固定后可让左右两轴标题处于同一行） |
 | `label_pad` | float | `10` / `12` | 标题与轴的间距 |
 | `limit` | [min,max] | `[]` | 量程；空数组 = 按数据自动 |
+| `limit_shift` | number | `0` | **量程整体平移**：显式/自动量程确定后，把上下限同向平移该值（正数向上），刻度随之重算；`--mark h` / `c` 即写此项（每档 ±10） |
 | `auto_pad_ratio` | float | `0.14` / `0.18` | 自动量程时上下留白比例；柱状轴基线固定为 0 |
 | `tick_start` | number/null | `null`（副/三轴为 `0`） | 刻度起始值 |
 | `tick_step` | number/null | `null` | 刻度间隔（设定后按固定步长生成刻度） |

@@ -282,6 +282,13 @@ def _configure_y_axis(ax, ax_cfg: dict[str, Any], values: Sequence[np.ndarray],
             lo = np.floor(lo / step) * step
             hi = np.ceil(hi / step) * step
 
+    # 量程整体平移（--mark h/c 即写此项；显式量程与自动量程都适用）。
+    # 放在取整之后、set_ylim 之前，刻度随即按平移后的量程生成。
+    shift = float(ax_cfg.get("limit_shift", 0.0) or 0.0)
+    if shift:
+        lo += shift
+        hi += shift
+
     if ax_cfg.get("scale") == "log":
         ax.set_yscale("log")
     ax.set_ylim(lo, hi)

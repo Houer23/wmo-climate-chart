@@ -37,6 +37,9 @@ python wmo_climate.py --city-id 237 --profile presentation
 # 临时改参数（点路径覆盖）
 python wmo_climate.py --city-id 237 --set series.rainfall.color=#ff7f0e --set figure.title.show=false
 
+# 绘图微调（--mark / --m）：气温轴上下限同时 +20°C、降水轴上限 250mm、三处字号微调
+python wmo_climate.py --city-id 237 --m hh,r12,t14,p14,tt18
+
 # 多城市对比
 python wmo_climate.py --compare 北京 --compare 1 --compare 156 --profile compare
 
@@ -58,6 +61,7 @@ python wmo_climate.py --list-cities --country 中国
 | `--profile 名称` | 选用配置；**未指定则用默认配置** |
 | `--profiles-file 路径` | 使用外部 profiles 文件（YAML，兼容 JSON），不污染项目内置配置 |
 | `--set 键=值` | 点路径覆盖配置，如 `series.rainfall.color=#ff0000`，可重复 |
+| `--mark 标记` | **绘图微调**（简写 `--m`，逗号分隔可一次多个，也可重复给出，空格自动去除）：<br>`h`/`hh`/`hhh` 气温轴**上下限同时** +10/20/30（最多 3 档），`c`/`cc`/`ccc` 同 h 但反向（-10/20/30）<br>`r<数字>` 降水轴上限档位 0-5 = 50/100/150/300/600/900mm（多数字**相加**，如 `r12`=250、`r02`=200；封顶 4000；0-5 之外忽略）<br>`t<数字>` / `p<数字>` / `tt<数字>` 气温轴标题 / 降水轴标题 / 图表标题字号（`tt0` = 不显示标题）<br>`ts<数字>` / `rs<数字>` 气温轴 / 降水轴**刻度步长**（小于该轴量程 1/10 时**不生效**，防刻度过密）<br>无法识别的标记**只告警**，不中断、不影响其余标记 |
 | `--list-profiles` | 列出全部可用配置及说明 |
 | `--show-config` | 打印解析后的最终配置（YAML，便于确认合并结果） |
 | `--init-profile 名称` | 导出全量配置模板到 `config/<名称>.yaml` |
@@ -127,7 +131,7 @@ DrawClimateChart/
 │   └── pipeline.py           # 编排：单城 / 批量 / 对比
 ├── scripts/                  # 可复用工具（夹具抓取 / CLI 验收 / 缺失值扫描）
 ├── tests/
-│   ├── test_regression.py    # 回归测试（离线可跑，275 项断言）
+│   ├── test_regression.py    # 回归测试（离线可跑，316 项断言）
 │   ├── fixtures/             # 真实响应样本（含城市索引与 samples/ 抽样数据）
 │   └── _output/              # 测试产物：渲染核对图 / 表格中间输出（不入库）
 ├── output/                   # 交付物：表格与图（生成物，不入库）

@@ -25,6 +25,9 @@ python wmo_climate.py --compare 237 --compare 1 --compare 156 --profile compare
 # 临时改一个绘图参数（点路径覆盖）
 python wmo_climate.py --city-id 237 --set series.rainfall.color=#ff7f0e --set figure.title.show=false
 
+# 绘图微调（--mark / --m）：气温轴上下限同时 +20°C、降水轴上限 250mm、三处字号微调
+python wmo_climate.py --city-id 237 --m hh,r12,t14,p14,tt18
+
 # 查看 / 导出配置
 python wmo_climate.py --list-profiles
 python wmo_climate.py --show-config --profile presentation
@@ -52,6 +55,7 @@ from src import __version__
 from src.city_index import CityLookupError
 from src.config_loader import (
     ConfigError,
+    apply_marks,
     coerce_value,
     dump_config,
     list_profiles,
@@ -127,6 +131,19 @@ def build_parser() -> argparse.ArgumentParser:
                       help="导出一份全量配置模板到 config/<名称>.yaml")
     conf.add_argument("--temp-unit", choices=["C", "F"], help="温度单位（快捷设置）")
     conf.add_argument("--rain-unit", choices=["mm", "inch"], help="降水单位（快捷设置）")
+
+    mark = parser.add_argument_group("绘图微调")
+    mark.add_argument("--mark", "--m", dest="mark", action="append", nargs="+", metavar="标记",
+                      help="绘图微调标记，逗号分隔可一次给多个（也可重复给出），空格自动去除："
+                           "h/hh/hhh 气温轴上下限同时 +10/+20/+30（最多 3 档），"
+                           "c/cc/ccc 同 h 但反向（-10/-20/-30，最多 3 档），"
+                           "r<数字> 降水轴上限档位 0-5 = 50/100/150/300/600/900 mm"
+                           "（多数字相加，如 r12=250、r02=200；封顶 4000；0-5 之外忽略），"
+                           "t<数字> 气温轴标题字号，p<数字> 降水轴标题字号，"
+                           "tt<数字> 图表标题字号（tt0 = 不显示标题），"
+                           "ts<数字> / rs<数字> 气温轴 / 降水轴刻度步长"
+                           "（小于该轴量程 1/10 时不生效，防过密）；"
+                           "无法识别的标记只告警，不中断、不影响其余标记")
 
     out = parser.add_argument_group("输出")
     out.add_argument("--out-dir", metavar="目录", help="输出目录（默认取配置 output.out_dir）")
@@ -232,7 +249,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         overrides = _parse_overrides(args.set, args)
         cfg = load_config(args.profile, profiles_path, overrides)
-        warnings = validate_config(cfg)
+        # --mark 作用在**已合并**的配置上（要读取当前量程/字号作为基准）
+        mark_notes, mark_warnings = apply_marks(cfg, args.mark)
+        warnings = validate_config(cfg) + mark_warnings
     except ConfigError as exc:
         print(f"配置错误：{exc}")
         return 2
@@ -240,6 +259,8 @@ def main(argv: list[str] | None = None) -> int:
     logger = Logger(args.log_level or cfg["output"].get("log_level", "INFO"))
     for msg in warnings:
         logger.warning(msg)
+    for msg in mark_notes:
+        logger.info(msg)
 
     if args.show_config:
         print(dump_config(cfg))

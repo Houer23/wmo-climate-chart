@@ -342,6 +342,7 @@ DEFAULTS: dict[str, Any] = {
         "label_valign": "auto",             # auto | top | center | bottom（标题垂直基准）
         "label_pad": 10,
         "limit": [],                        # [] = 自动；否则 [min, max]
+        "limit_shift": 0.0,                 # 量程整体平移（显式/自动量程都适用，正数向上）；--mark h/c 写此项
         "auto_pad_ratio": 0.14,
         "tick_start": None,
         "tick_step": None,
@@ -374,6 +375,7 @@ DEFAULTS: dict[str, Any] = {
         "label_valign": "auto",
         "label_pad": 12,
         "limit": [],
+        "limit_shift": 0.0,                 # 量程整体平移（正数向上）；--mark h/c 写此项
         "auto_pad_ratio": 0.18,
         "tick_start": 0,
         "tick_step": None,
@@ -408,6 +410,7 @@ DEFAULTS: dict[str, Any] = {
         "label_valign": "auto",
         "label_pad": 12,
         "limit": [],
+        "limit_shift": 0.0,                 # 量程整体平移（正数向上）
         "auto_pad_ratio": 0.18,
         "tick_start": 0,
         "tick_step": None,
@@ -565,6 +568,176 @@ def coerce_value(raw: str) -> Any:
         return float(text)
     except ValueError:
         return raw
+
+
+# ---- --mark 绘图微调 ---------------------------------------------------
+
+#: ``--mark r<数字>`` 的降水轴上限档位（mm）：档位 0-5
+MARK_RAIN_TIERS = (50.0, 100.0, 150.0, 300.0, 600.0, 900.0)
+#: 降水轴上限的封顶值（mm）：各档相加超过它时截取
+MARK_RAIN_MAX = 4000.0
+#: ``--mark h`` / ``c`` 每档的平移量（轴单位，默认 °C）与最多档数
+MARK_TEMP_STEP = 10.0
+MARK_TEMP_MAX_STEPS = 3
+#: ``--mark ts`` / ``rs`` 的密度下限：步长小于「量程 / 该值」则不生效（防刻度过密）
+MARK_TICK_MIN_RATIO = 10.0
+
+
+def split_marks(raw_items: Optional[Any] = None) -> list[str]:
+    """把 ``--mark`` 的原始参数摊平成标记列表。
+
+    支持重复给出（``--m h --m r12``）、空格分隔与逗号分隔（``--m h,r12``），
+    并**去掉所有空白**（``--m " h , r12 "`` 等价于 ``--m h,r12``）。
+    """
+    tokens: list[str] = []
+    for item in raw_items or []:
+        pieces = item if isinstance(item, (list, tuple)) else [item]
+        for piece in pieces:
+            for chunk in str(piece).split(","):
+                text = "".join(str(chunk).split())
+                if text:
+                    tokens.append(text)
+    return tokens
+
+
+def _mark_number(body: str) -> Optional[float]:
+    """解析标记后的数字（字号、步长）；无法解析或为负返回 None。"""
+    try:
+        value = float(body)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
+
+
+def _axis_span(axis_cfg: dict[str, Any]) -> Optional[float]:
+    """轴的**显式**量程跨度；``limit`` 为空（自动量程）时返回 None（无法预判密度）。"""
+    limit = list(axis_cfg.get("limit") or [])
+    if len(limit) == 2 and limit[0] is not None and limit[1] is not None:
+        return abs(float(limit[1]) - float(limit[0]))
+    return None
+
+
+def apply_marks(cfg: dict[str, Any], raw_items: Optional[Any] = None) -> tuple[list[str], list[str]]:
+    """把 ``--mark`` 微调标记作用到**已解析**的配置上，返回 ``(变更说明, 告警)``。
+
+    标记语法（逗号分隔、空格自动去除，字母大小写等价）：
+
+    =================================  ==========================================
+    ``h`` / ``hh`` / ``hhh``           气温轴**上下限同时** +10 / +20 / +30（最多 3 档=±30）
+    ``c`` / ``cc`` / ``ccc``           同上但方向相反：-10 / -20 / -30
+    ``r<数字>``                        降水轴上限档位 0-5 = 50/100/150/300/600/900 mm，
+                                      多个数字表示档位相加（``r12``=250、``r02``=200），
+                                      封顶 4000 mm，0-5 之外的字符忽略
+    ``t<数字>``                        气温轴标题字号
+    ``p<数字>``                        降水轴标题字号
+    ``tt<数字>``                       图表标题字号；``tt0`` = 不显示标题
+    ``ts<数字>``                       气温轴刻度步长；小于量程 1/10 时**不生效**（防过密）
+    ``rs<数字>``                       降水轴刻度步长；同上限制
+    =================================  ==========================================
+
+    密度限制按该轴的**显式量程**（``axes_*.limit``）判定；轴为自动量程时无法预估跨度，
+    步长照常写入但不会拦截（会在变更说明里注明）。
+
+    **无法识别的标记只记告警**：不抛异常、不中断，其余可识别的标记照常生效。
+    """
+    notes: list[str] = []
+    warnings: list[str] = []
+    temp_steps = 0                  # h/c 累计档数（正 = 量程上移）
+    rain_tiers: list[int] = []      # r 累计档位
+
+    for token in split_marks(raw_items):
+        head, body = token[0], token[1:]
+
+        # ---- h/c：气温轴量程整体平移（上下限同向） ----
+        lowered = token.lower()
+        if lowered and all(ch in "hc" for ch in lowered):
+            temp_steps += sum(1 for ch in lowered if ch == "h")
+            temp_steps -= sum(1 for ch in lowered if ch == "c")
+            continue
+
+        # ---- ts / rs：刻度步长（二字符前缀须先判，否则会被 t / r 吃掉） ----
+        pair = token[:2].lower()
+        if pair in ("ts", "rs"):
+            step = _mark_number(token[2:])
+            axis_key = "axes_primary" if pair == "ts" else "axes_secondary"
+            axis_name = "气温轴" if pair == "ts" else "降水轴"
+            if step is None or step <= 0:
+                warnings.append(f"--mark「{token}」缺少有效步长（须为正数），已忽略")
+                continue
+            span = _axis_span(cfg[axis_key])
+            if span is not None and step < span / MARK_TICK_MIN_RATIO:
+                warnings.append(f"--mark「{token}」步长 {step:g} 小于{axis_name}量程 {span:g} 的"
+                                f" 1/{MARK_TICK_MIN_RATIO:g}（最小 {span / MARK_TICK_MIN_RATIO:g}），"
+                                "刻度过密，已忽略")
+                continue
+            set_by_path(cfg, f"{axis_key}.tick_step", step)
+            notes.append(f"--mark：{axis_name}刻度步长 {step:g}"
+                         + ("" if span is not None
+                            else f"（{axis_name}为自动量程，密度限制未预判）"))
+            continue
+
+        # ---- r：降水轴上限档位 ----
+        if head in ("r", "R"):
+            digits = [ch for ch in body if ch.isdigit()]
+            valid = [int(ch) for ch in digits if 0 <= int(ch) <= len(MARK_RAIN_TIERS) - 1]
+            if not valid:
+                warnings.append(f"--mark「{token}」没有 0-5 范围内的档位数字，已忽略")
+                continue
+            if len(valid) != len(digits):
+                warnings.append(f"--mark「{token}」忽略了 {len(digits) - len(valid)}"
+                                " 个 0-5 之外的字符")
+            rain_tiers.extend(valid)
+            continue
+
+        # ---- tt / t / p：字号（tt 须先判，否则会被当成 t 吃掉） ----
+        if token[:2].lower() == "tt":
+            size = _mark_number(token[2:])
+            if size is None:
+                warnings.append(f"--mark「{token}」缺少有效字号（须为非负数字），已忽略")
+                continue
+            set_by_path(cfg, "figure.title.fontsize", size)
+            set_by_path(cfg, "figure.title.show", size > 0)
+            notes.append(f"--mark：图表标题字号 {size:g}" if size > 0
+                         else "--mark：图表标题已隐藏（tt0）")
+            continue
+        if head.lower() in ("t", "p"):
+            size = _mark_number(body)
+            if size is None:
+                warnings.append(f"--mark「{token}」缺少有效字号（须为非负数字），已忽略")
+                continue
+            if head.lower() == "t":                        # 气温轴标题
+                set_by_path(cfg, "axes_primary.label_fontsize", size)
+                notes.append(f"--mark：气温轴标题字号 {size:g}")
+            else:                                          # 降水轴标题
+                set_by_path(cfg, "axes_secondary.label_fontsize", size)
+                notes.append(f"--mark：降水轴标题字号 {size:g}")
+            continue
+        warnings.append(f"--mark「{token}」不是可识别的标记，已忽略")
+
+    # ---- 气温轴：量程整体平移（h/c 合并后一次写回） ----
+    if temp_steps:
+        if abs(temp_steps) > MARK_TEMP_MAX_STEPS:
+            warnings.append(f"--mark：h/c 最多 3 档（±{MARK_TEMP_STEP * MARK_TEMP_MAX_STEPS:g}），"
+                            f"实际 {temp_steps:+d} 档已截取")
+            temp_steps = max(-MARK_TEMP_MAX_STEPS, min(MARK_TEMP_MAX_STEPS, temp_steps))
+        base = float(cfg["axes_primary"].get("limit_shift") or 0.0)
+        delta = temp_steps * MARK_TEMP_STEP
+        set_by_path(cfg, "axes_primary.limit_shift", base + delta)
+        notes.append(f"--mark：气温轴上下限同时 {delta:+g}"
+                     f"（累计 {base + delta:+g}）")
+
+    # ---- 降水轴：上限落到档位（保留现有下限，默认 0） ----
+    if rain_tiers:
+        total = sum(MARK_RAIN_TIERS[idx] for idx in rain_tiers)
+        upper = min(total, MARK_RAIN_MAX)
+        if total > MARK_RAIN_MAX:
+            warnings.append(f"--mark：降水轴上限 {total:g} mm 超过封顶值，已截取为 {MARK_RAIN_MAX:g} mm")
+        limit = list(cfg["axes_secondary"].get("limit") or [])
+        lower = float(limit[0]) if len(limit) >= 2 and limit[0] is not None else 0.0
+        set_by_path(cfg, "axes_secondary.limit", [lower, upper])
+        notes.append(f"--mark：降水轴上限 {upper:g} mm")
+
+    return notes, warnings
 
 
 # ---- 配置加载 ----------------------------------------------------------
