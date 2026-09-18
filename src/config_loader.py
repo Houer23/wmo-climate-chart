@@ -1,13 +1,16 @@
 """配置系统：内置完整默认值、深合并、多套 profiles、继承与样式复用、校验。
 
+配置文件一律使用 **YAML**（``.yaml`` / ``.yml``）；由于 JSON 是 YAML 的子集，
+旧 ``.json`` 配置仍可原样读取（兼容，优先级最低），便于平滑迁移。
+
 配置来源（后者覆盖前者）
 ----------------------------
 1. 内置默认值 ``DEFAULTS``（本文件，含全部可配置项）
-2. ``config/profiles.json`` 里的命名配置（可 ``extends`` 继承、可 ``apply_styles`` 复用样式）
+2. ``config/profiles.yaml`` 里的命名配置（可 ``extends`` 继承、可 ``apply_styles`` 复用样式）
 3. 自定义配置（多文件，见 ``CUSTOM_PROFILES_PATH`` / ``CUSTOM_PROFILES_DIR``，按"上下顺序"加载，可跨文件 ``extends`` 继承）
 4. 命令行 ``--set key.path=value`` 点路径覆盖
 
-未指定 ``--profile`` 时使用 ``profiles.json`` 中的 ``default_profile``。
+未指定 ``--profile`` 时使用 ``profiles.yaml`` 中的 ``default_profile``。
 """
 
 from __future__ import annotations
@@ -17,18 +20,27 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
+import yaml
+
 from .models import normalize_series_key
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-DEFAULT_PROFILES_PATH = PROJECT_ROOT / "config" / "profiles.json"
+DEFAULT_PROFILES_PATH = PROJECT_ROOT / "config" / "profiles.yaml"
 
-# 自定义配置（多文件，按"上下顺序"加载）：
-#   1) config/custom.json    —— 单文件（兼容旧用法）；若存在则最先加载
-#   2) config/custom/*.json  —— 多文件目录，按文件名升序加载（忽略隐藏文件与子目录）
-# 与内置 config/profiles.json 合并共存（同名时自定义优先）；后续文件可通过 extends 引用前文出现的同名配置。
-CUSTOM_PROFILES_PATH = PROJECT_ROOT / "config" / "custom.json"
+# 自定义配置（多文件，按"上下顺序"加载，靠后者优先级更高）：
+#   1) config/custom.json              —— 旧 JSON 单文件（兼容，优先级最低）
+#   2) config/custom/*.json            —— 旧 JSON 多文件（兼容，按文件名升序）
+#   3) config/custom.yaml              —— 单文件
+#   4) config/custom/*.yaml / *.yml    —— 多文件目录，按文件名升序（忽略隐藏文件与子目录）
+# 与内置 config/profiles.yaml 合并共存（同名时自定义优先、YAML 优先于 JSON）；
+# 任意文件中的配置都可通过 extends 引用前文出现的同名配置。
+CUSTOM_PROFILES_PATH = PROJECT_ROOT / "config" / "custom.yaml"
 CUSTOM_PROFILES_DIR = PROJECT_ROOT / "config" / "custom"
+
+#: 正式配置扩展名（YAML）；``.json`` 作为兼容格式仍可读取
+CONFIG_SUFFIXES = (".yaml", ".yml")
+LEGACY_CONFIG_SUFFIXES = (".json",)
 
 
 class ConfigError(RuntimeError):
@@ -545,30 +557,53 @@ def coerce_value(raw: str) -> Any:
 
 # ---- 配置加载 ----------------------------------------------------------
 
+def _read_config_file(path: Path) -> dict[str, Any]:
+    """读取单个配置文件（YAML；JSON 是其子集，同样可读）。
+
+    顶层必须是映射（对象）；空文件视为空配置。解析失败抛 :class:`ConfigError`。
+    """
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+    except yaml.YAMLError as exc:
+        raise ConfigError(f"配置不是合法 YAML：{path}（{exc}）") from exc
+    if payload is None:
+        return {}
+    if not isinstance(payload, dict):
+        raise ConfigError(f"配置顶层必须是对象：{path}")
+    return payload
+
+
+def _dump_yaml(data: Any) -> str:
+    """按项目统一风格序列化 YAML：保留键顺序、中文不转义、短集合用行内写法。"""
+    return yaml.safe_dump(
+        data,
+        allow_unicode=True,
+        sort_keys=False,
+        default_flow_style=None,
+        width=110,
+    )
+
+
 def _load_custom_profiles(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     """加载**单个**自定义配置文件，返回 (profiles, styles)。
 
-    推荐结构（与 `profiles.json` 一致，`profiles` 下可放任意多个自定义配置）：
+    推荐结构（与 `profiles.yaml` 一致，`profiles` 下可放任意多个自定义配置）：
 
-    ```jsonc
-    {
-      "styles":   { "my_style": { ... } },      // 可选，命名样式
-      "profiles": { "简图": { ... }, "投屏": { ... } }
-    }
+    ```yaml
+    styles:                # 可选，命名样式
+      my_style: { ... }
+    profiles:
+      简图: { ... }
+      投屏: { ... }
     ```
 
     同时兼容 `--init-profile` 导出的**单配置全量模板**（整个文件即一个配置主体，
-    配置名取 `"name"` 字段或文件名）；其中的 `profile_name` / `profile_description`
+    配置名取 `name` 字段或文件名）；其中的 `profile_name` / `profile_description`
     属运行时字段，加载时忽略。文件不存在则视为无自定义配置。
     """
-    if not path.exists():
+    if not path.is_file():
         return {}, {}
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8-sig"))
-    except ValueError as exc:
-        raise ConfigError(f"自定义配置不是合法 JSON：{path}（{exc}）") from exc
-    if not isinstance(payload, dict):
-        raise ConfigError(f"自定义配置顶层必须是对象：{path}")
+    payload = _read_config_file(path)
 
     if isinstance(payload.get("profiles"), dict):
         profiles = {str(k): v for k, v in payload["profiles"].items()}
@@ -587,39 +622,43 @@ def _load_custom_profiles(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
 def _custom_config_sources() -> list[Path]:
     """返回有序的自定义配置文件列表（按"上下顺序"加载）。
 
-    顺序：
-    1. ``config/custom.json``（单文件，兼容旧用法；若存在）
-    2. ``config/custom/*.json``（多文件目录，按文件名升序；忽略隐藏文件与子目录）
+    顺序（靠后者优先级更高）：
+    1. ``config/custom.json``（旧 JSON，兼容）
+    2. ``config/custom/*.json``（旧 JSON，按文件名升序；兼容）
+    3. ``config/custom.yaml``（单文件）
+    4. ``config/custom/*.yaml`` / ``*.yml``（多文件目录，按文件名升序；忽略隐藏文件与子目录）
 
-    靠后者定义的同名 profile / style 覆盖靠前者；任意文件中的 profile 均可通过
-    ``extends`` 引用在更早文件（或内置、或外部文件）中定义的同名配置。
+    YAML 一律排在 JSON 之后，因此从 JSON 迁移到同名 YAML 时以 YAML 为准。
+    任意文件中的 profile 均可通过 ``extends`` 引用在更早文件（或内置、或外部文件）
+    中定义的同名配置。
     """
-    sources: list[Path] = []
+    legacy: list[Path] = []
+    yaml_files: list[Path] = []
+    legacy_single = CUSTOM_PROFILES_PATH.with_suffix(".json")    # 旧 config/custom.json
+    if legacy_single.is_file():
+        legacy.append(legacy_single)
+    if CUSTOM_PROFILES_DIR.is_dir():
+        entries = [p for p in CUSTOM_PROFILES_DIR.iterdir()
+                   if p.is_file() and not p.name.startswith(".")]
+        legacy.extend(sorted(p for p in entries if p.suffix.lower() in LEGACY_CONFIG_SUFFIXES))
+        yaml_files.extend(sorted(p for p in entries if p.suffix.lower() in CONFIG_SUFFIXES))
+
+    sources: list[Path] = list(legacy)
     if CUSTOM_PROFILES_PATH.is_file():
         sources.append(CUSTOM_PROFILES_PATH)
-    if CUSTOM_PROFILES_DIR.is_dir():
-        sources.extend(
-            p for p in sorted(CUSTOM_PROFILES_DIR.glob("*.json"))
-            if p.is_file() and not p.name.startswith(".")
-        )
+    sources.extend(yaml_files)
     return sources
 
 
 def load_profiles_file(path: Optional[Path] = None) -> dict[str, Any]:
     """读取内置/外部 profiles 文件，并合并全部自定义配置文件。
 
-    合并顺序：内置或外部 ``profiles.json`` → 各自定义配置文件（按 ``_custom_config_sources`` 的顺序）。
+    合并顺序：内置或外部 ``profiles.yaml`` → 各自定义配置文件（按 ``_custom_config_sources`` 的顺序）。
     同名 profile / style 以**靠后**的自定义文件为准；来源文件缺失时忽略该来源。
+    指定的外部文件可为 ``.yaml`` / ``.yml`` / ``.json``（JSON 按 YAML 子集解析）。
     """
     target = Path(path) if path else DEFAULT_PROFILES_PATH
-    payload: dict[str, Any] = {}
-    if target.exists():
-        try:
-            payload = json.loads(target.read_text(encoding="utf-8-sig"))
-        except ValueError as exc:
-            raise ConfigError(f"配置文件不是合法 JSON：{target}（{exc}）") from exc
-        if not isinstance(payload, dict):
-            raise ConfigError(f"配置文件顶层必须是对象：{target}")
+    payload: dict[str, Any] = _read_config_file(target) if target.is_file() else {}
 
     payload.setdefault("styles", {})
     payload.setdefault("profiles", {})
@@ -837,15 +876,21 @@ def validate_config(cfg: dict[str, Any]) -> list[str]:
 
 
 def dump_config(cfg: dict[str, Any]) -> str:
-    """输出可读的最终配置（剔除内部键）。"""
+    """输出可读的最终配置（YAML，剔除内部键）。"""
     clean = {k: v for k, v in cfg.items() if not k.startswith("_")}
-    return json.dumps(clean, ensure_ascii=False, indent=2)
+    return _dump_yaml(clean)
 
 
 def write_template(path: Path, cfg: Optional[dict[str, Any]] = None) -> Path:
-    """导出一份全量配置模板（含全部可配置项）。"""
+    """导出一份全量配置模板（YAML，含全部可配置项）。"""
     payload = copy.deepcopy(cfg if cfg is not None else DEFAULTS)
     payload = {k: v for k, v in payload.items() if not k.startswith("_")}
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    header = (
+        "# 由 `python wmo_climate.py --init-profile <名称>` 导出的全量配置模板（YAML）。\n"
+        "# 只保留想改的项即可，其余自动与内置默认值深合并；完整配置项见 config/README.md。\n"
+        "# 放到 config/custom.yaml 的 profiles 下，或用 --profiles-file 直接指定本文件。\n"
+        "\n"
+    )
+    path.write_text(header + _dump_yaml(payload), encoding="utf-8")
     return path

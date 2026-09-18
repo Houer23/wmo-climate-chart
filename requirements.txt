@@ -1,7 +1,8 @@
-"""项目依赖（仅绘图与 XLSX 需要第三方库，HTTP 走标准库）。
+"""项目依赖（绘图 / XLSX / YAML 配置需要第三方库，HTTP 走标准库）。
 
     pip install -r requirements.txt
 """
 
 matplotlib>=3.8
 openpyxl>=3.1
+PyYAML>=6.0

@@ -10,7 +10,7 @@
 ## 1. 环境与安装
 
 ```bash
-# 依赖：matplotlib（含 numpy）+ openpyxl；网络请求仅用 Python 标准库
+# 依赖：matplotlib（含 numpy）+ openpyxl + PyYAML；网络请求仅用 Python 标准库
 pip install -r requirements.txt
 ```
 
@@ -56,11 +56,11 @@ python wmo_climate.py --list-cities --country 中国
 | `--compare ID或名称` | 多城市对比，可重复；同时传多个 cityId 或城市名 |
 | `--compare-metric 元素` | 对比元素：`minTemp`/`maxTemp`/`meanTemp`/`rainfall`/`raindays` |
 | `--profile 名称` | 选用配置；**未指定则用默认配置** |
-| `--profiles-file 路径` | 使用外部 profiles 文件，不污染项目内置配置 |
+| `--profiles-file 路径` | 使用外部 profiles 文件（YAML，兼容 JSON），不污染项目内置配置 |
 | `--set 键=值` | 点路径覆盖配置，如 `series.rainfall.color=#ff0000`，可重复 |
 | `--list-profiles` | 列出全部可用配置及说明 |
-| `--show-config` | 打印解析后的最终配置（便于确认合并结果） |
-| `--init-profile 名称` | 导出全量配置模板到 `config/<名称>.json` |
+| `--show-config` | 打印解析后的最终配置（YAML，便于确认合并结果） |
+| `--init-profile 名称` | 导出全量配置模板到 `config/<名称>.yaml` |
 | `--temp-unit C\|F` | 温度单位（等价于 `--set data.temp_unit=`） |
 | `--rain-unit mm\|inch` | 降水单位 |
 | `--out-dir 目录` | 输出目录 |
@@ -112,8 +112,8 @@ DrawClimateChart/
 ├── wmo_climate.py            # CLI 主入口
 ├── requirements.txt
 ├── config/
-│   ├── profiles.json         # 内置配置（default + 14 套预设 + 可复用样式）
-│   ├── custom.json           # 自定义配置（单文件，如「简图」）
+│   ├── profiles.yaml         # 内置配置（default + 14 套预设 + 可复用样式）
+│   ├── custom.yaml           # 自定义配置（单文件，如「简图」）
 │   ├── custom/               # 自定义配置（多文件目录，按文件名顺序加载，可互继承）
 │   └── README.md             # ★ 配置项完整字典
 ├── src/
@@ -127,7 +127,7 @@ DrawClimateChart/
 │   └── pipeline.py           # 编排：单城 / 批量 / 对比
 ├── scripts/                  # 可复用工具（夹具抓取 / CLI 验收 / 缺失值扫描）
 ├── tests/
-│   ├── test_regression.py    # 回归测试（离线可跑，130 项断言）
+│   ├── test_regression.py    # 回归测试（离线可跑，257 项断言）
 │   ├── fixtures/             # 真实响应样本（含城市索引与 samples/ 抽样数据）
 │   └── _output/              # 测试产物：渲染核对图 / 表格中间输出（不入库）
 ├── output/                   # 交付物：表格与图（生成物，不入库）
@@ -140,19 +140,23 @@ DrawClimateChart/
 
 ## 6. 配置系统
 
-四层来源，后者覆盖前者：
+配置文件使用 **YAML**（`.yaml` / `.yml`），四层来源，后者覆盖前者：
 
 1. **内置默认值**（`src/config_loader.py` 的 `DEFAULTS`，含全部可配置项）
-2. **配置文件中的命名配置**：内置 `config/profiles.json`
-3. **自定义配置（多文件）**：`config/custom.json` + `config/custom/*.json`，按"上下顺序"加载，
+2. **配置文件中的命名配置**：内置 `config/profiles.yaml`
+3. **自定义配置（多文件）**：`config/custom.yaml` + `config/custom/*.yaml`，按"上下顺序"加载，
    与内置配置合并共存（**同名时自定义优先**；可 `extends` 跨文件继承、可 `apply_styles` 复用样式、可只写要改的项）
 4. **命令行 `--set 键=值`** 点路径覆盖
 
-未指定 `--profile` 时使用 `profiles.json` 的 `default_profile`。
+未指定 `--profile` 时使用 `profiles.yaml` 的 `default_profile`。
 
-> **自定义配置**：写在 `config/custom.json` 或 `config/custom/*.json` 的 `profiles` 下（一配置一项），
-> 与内置配置合并共存，无需改动 `profiles.json`；多文件时**后加载者覆盖先加载者**，
+> **自定义配置**：写在 `config/custom.yaml` 或 `config/custom/*.yaml` 的 `profiles` 下（一配置一项），
+> 与内置配置合并共存，无需改动 `profiles.yaml`；多文件时**后加载者覆盖先加载者**，
 > 且任意文件中的配置都能 `extends` 更早文件中出现的同名配置。仓库已内置一个示例 `简图`。
+
+> **JSON 兼容**：JSON 是 YAML 的子集，旧的 `.json` 配置（`--profiles-file x.json`、
+> `config/custom.json`、`config/custom/*.json`）仍可原样读取，只是优先级低于 YAML；迁移时把文件
+> 改名为 `.yaml` 即可，内容无需改动。
 
 ### 6.1 内置预设
 
@@ -180,26 +184,27 @@ python wmo_climate.py --init-profile my_style  # 导出全量模板后再改
 
 ### 6.2 自定义配置示例
 
-> 自定义配置写在 **`config/custom.json`** 或 **`config/custom/*.json`** 的 `profiles` 下（可放任意多个），
+> 自定义配置写在 **`config/custom.yaml`** 或 **`config/custom/*.yaml`** 的 `profiles` 下（可放任意多个），
 > 无需复制内置文件；同名配置会覆盖内置同名项。多文件按文件名升序加载，后续文件可 `extends` 前文出现的配置：
 
-```jsonc
-{
-  "profiles": {
-    "my_style": {
-      "extends": "default",
-      "apply_styles": ["official_colors"],
-      "figure": { "figsize": [14, 7], "title": { "text": "{city}气候 ({period})" } },
-      "series": {
-        "meanTemp": { "enabled": true, "chart_type": "smooth", "color": "#333333" },
-        "rainfall": { "color": "#4a9fd8", "data_labels": { "show": true } }
-      }
-    }
-  }
-}
+```yaml
+profiles:
+  my_style:
+    extends: default
+    apply_styles: [official_colors]
+    figure:
+      figsize: [14, 7]
+      title: {text: "{city}气候 ({period})"}
+    series:
+      meanTemp: {enabled: true, chart_type: smooth, color: "#333333"}
+      rainfall: {color: "#4a9fd8", data_labels: {show: true}}
 ```
 
 > 只写想改的项即可，其余自动继承。完整配置项见 **[config/README.md](config/README.md)**。
+> 也可 `python wmo_climate.py --init-profile my_style` 导出带全部配置项与注释说明的 YAML 模板后再改。
+
+> **YAML 书写提示**：`01`、`1.0`、`yes`/`no`/`on`/`off`、`#abc` 等会被 YAML 解析成数字或布尔，
+> 需要按字面字符串使用时请加引号（如 `month_label_style: "01"`、`linestyle: "#"`）。
 
 ---
 
@@ -227,7 +232,7 @@ python tests/test_regression.py --network  # 追加联网用例
 ```
 
 覆盖：数值容错、平均气温派生、raintype 三种变体、缺失值、无气候数据城市、
-配置深合并与继承、非法配置报错、四种表格格式与转置/年列/单位变体、
+配置深合并与继承（多文件 YAML + 旧 JSON 兼容）、非法配置报错、四种表格格式与转置/年列/单位变体、
 **全部配置逐一渲染**、三轴渲染、多城市对比、城市名反查。
 
 ---

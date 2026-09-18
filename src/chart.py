@@ -973,10 +973,18 @@ def _place_extremes_label(ax, text: str, xy: tuple[float, float], base_dy: float
                           acfg: dict[str, Any]) -> tuple[Any, Optional[Any]]:
     """放置最高/最低气温标注，必要时自动避让，返回 (标注对象, 最终文字盒)。
 
-    候选集合：沿偏好侧外推（基准 / 1.6 / 2.2 / 3.0 倍）× 横向 0 / ±30 / ±60pt，
-    以及翻到数据点另一侧（``allow_flip``）的同样几档；全部候选都会被评估，取
-    "冲突最少 → 越界最少 → 位移最小（翻边另加权重）"的位置，因此既避开曲线，也尽量少动。
-    偏移以**点**为单位，与画布尺寸、布局无关。
+    候选集合：沿偏好侧外推（基准 / 1.6 / 2.2 / 3.0 倍）× 横向错位，以及翻到数据点另一侧
+    （``allow_flip``）的同样几档。横向档位按**标注自身半宽**取（长文案固定挪 ±30pt 根本
+    挪不出界），另加固定的 ±30 / ±60pt。
+
+    每个候选再派生一个**最小幅度推回坐标区内**的版本：首月/末月或数值贴近上下边界时，
+    标注常常整块落到绘图区之外（实测乌兰巴托 + 简图系配置：最低月标注掉到坐标区底边以下、
+    压住月份刻度，只因"降低 1.6 倍"是唯一不压平均降水线的解）。推回版本让算法在
+    "压线"与"出界"之外多出"区内且不压线"的第三种选择。
+
+    全部候选按 "冲突最少 → 越界最少（各边越界量按点累加，而非只数越界边数）→ 位移最小
+    （翻边另加权重）" 评分，因此既避开曲线，也尽量少动、尽量不出界。
+    偏移以**点**为单位，与画布尺寸、布局无关；``max_distance`` 仍是最终偏移各分量的硬上限。
     """
     color = str(acfg.get("color", "#a32d2d"))
     anno = ax.annotate(
@@ -1008,16 +1016,43 @@ def _place_extremes_label(ax, text: str, xy: tuple[float, float], base_dy: float
 
     base = float(base_dy)
     preferred_up = base >= 0
+
+    # 横向档位：0 → 半个标注宽 → 一个标注宽，再补固定档；长文案必须按自身宽度挪
+    half_w = max(box0.width / scale / 2.0, 1.0)
+    dx_steps: list[float] = [0.0]
+    for mult in (1.0, 1.4, 2.0):
+        dx_steps.extend((half_w * mult, -half_w * mult))
+    dx_steps.extend((30.0, -30.0, 60.0, -60.0))
+
     candidates: list[tuple[float, float]] = []
     for mult in (1.0, 1.6, 2.2, 3.0):
-        candidates.append((0.0, cap(base * mult)))
-    for dx in (30.0, -30.0, 60.0, -60.0):
-        for mult in (1.0, 1.6, 2.2):
+        for dx in dx_steps:
             candidates.append((cap(dx), cap(base * mult)))
     if acfg.get("allow_flip", True):
         for mult in (1.0, 1.6, 2.2):
-            for dx in (0.0, 30.0, -30.0, 60.0, -60.0):
+            for dx in dx_steps:
                 candidates.append((cap(dx), cap(-base * mult)))
+
+    def push_inside(dx: float, dy: float) -> tuple[float, float]:
+        """把候选框以最小幅度推回坐标区内（留出 gap）；已在区内则原样返回。"""
+        box = box0.translated(dx * scale, (dy - base) * scale)
+        shift_x = shift_y = 0.0
+        if box.x0 < axes_box.x0 + gap_px:
+            shift_x = axes_box.x0 + gap_px - box.x0
+        elif box.x1 > axes_box.x1 - gap_px:
+            shift_x = axes_box.x1 - gap_px - box.x1
+        if box.y0 < axes_box.y0 + gap_px:
+            shift_y = axes_box.y0 + gap_px - box.y0
+        elif box.y1 > axes_box.y1 - gap_px:
+            shift_y = axes_box.y1 - gap_px - box.y1
+        if shift_x == 0.0 and shift_y == 0.0:
+            return dx, dy
+        return cap(dx + shift_x / scale), cap(dy + shift_y / scale)
+
+    for cand in list(candidates):
+        pushed = push_inside(*cand)
+        if pushed != cand:
+            candidates.append(pushed)
 
     clouds = []
     for ln in line_obstacles:
@@ -1034,8 +1069,9 @@ def _place_extremes_label(ax, text: str, xy: tuple[float, float], base_dy: float
         hits += sum(1 for ob in placed_boxes
                     if test.x0 < ob.x1 and ob.x0 < test.x1
                     and test.y0 < ob.y1 and ob.y0 < test.y1)
-        spill = (int(box.x0 < axes_box.x0) + int(box.x1 > axes_box.x1)
-                 + int(box.y0 < axes_box.y0) + int(box.y1 > axes_box.y1))
+        # 越界量（点）：四条边超出坐标区的部分累加，比"越界边数"更能分辨越界深浅
+        spill = (max(0.0, axes_box.x0 - box.x0) + max(0.0, box.x1 - axes_box.x1)
+                 + max(0.0, axes_box.y0 - box.y0) + max(0.0, box.y1 - axes_box.y1)) / scale
         flipped = (dy > 0) != preferred_up
         cost = abs(dx) + abs(dy - base) + (30.0 if flipped else 0.0)
         score = (float(hits), float(spill), cost)

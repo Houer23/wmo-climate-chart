@@ -116,13 +116,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     conf = parser.add_argument_group("配置")
     conf.add_argument("--profile", metavar="名称", help="配置名称；未指定则使用默认配置")
-    conf.add_argument("--profiles-file", metavar="路径", help="自定义 profiles 配置文件")
+    conf.add_argument("--profiles-file", metavar="路径",
+                      help="自定义 profiles 配置文件（YAML；兼容 JSON）")
     conf.add_argument("--set", action="append", default=[], metavar="键=值",
                       help="点路径覆盖配置，如 --set series.rainfall.color=#ff0000，可重复")
     conf.add_argument("--list-profiles", action="store_true", help="列出全部可用配置")
-    conf.add_argument("--show-config", action="store_true", help="打印解析后的最终配置")
+    conf.add_argument("--show-config", action="store_true", help="打印解析后的最终配置（YAML）")
     conf.add_argument("--init-profile", metavar="名称",
-                      help="导出一份全量配置模板到 config/<名称>.json")
+                      help="导出一份全量配置模板到 config/<名称>.yaml")
     conf.add_argument("--temp-unit", choices=["C", "F"], help="温度单位（快捷设置）")
     conf.add_argument("--rain-unit", choices=["mm", "inch"], help="降水单位（快捷设置）")
 
@@ -216,7 +217,12 @@ def main(argv: list[str] | None = None) -> int:
                 cfg = load_config(args.init_profile, profiles_path)
             except ConfigError:
                 cfg = load_config(None, profiles_path)
-            target = Path(__file__).resolve().parent / "config" / f"{args.init_profile}.json"
+            # 允许传入 my_style.yaml / my_style.json，统一导出为 .yaml
+            init_path = Path(args.init_profile)
+            init_name = (init_path.stem
+                         if init_path.suffix.lower() in (".yaml", ".yml", ".json")
+                         else args.init_profile)
+            target = Path(__file__).resolve().parent / "config" / f"{init_name}.yaml"
             write_template(target, cfg)
             print(f"已导出全量配置模板：{target}")
         return 0

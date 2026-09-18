@@ -1,41 +1,50 @@
 # 配置项完整字典
 
-本文件是 `config/profiles.json` 与 `--set` 的**完整可配置项清单**。
-内置默认值定义在 `src/config_loader.py` 的 `DEFAULTS`，任何时候都可用
-`python wmo_climate.py --show-config` 打印**合并后的最终配置**对照阅读。
+本文件是 `config/profiles.yaml`、`config/custom.yaml` 与 `--set` 的**完整可配置项清单**。
+配置一律使用 **YAML**（`.yaml` / `.yml`）。内置默认值定义在 `src/config_loader.py` 的 `DEFAULTS`，
+任何时候都可用 `python wmo_climate.py --show-config` 打印**合并后的最终配置**（YAML）对照阅读。
 
 **配置来源与优先级**（后者覆盖前者）：
 
 1. 内置默认值 `DEFAULTS`（= 下方所有默认值）
-2. 内置 `config/profiles.json` 选定的配置；`--profile <名称>`；未指定用 `default_profile`
-3. 自定义配置（多文件）：`config/custom.json` + `config/custom/*.json` 按"上下顺序"加载并合并
+2. 内置 `config/profiles.yaml` 选定的配置；`--profile <名称>`；未指定用 `default_profile`
+3. 自定义配置（多文件）：`config/custom.yaml` + `config/custom/*.yaml` 按"上下顺序"加载并合并
    （**同名时自定义优先**；可 `extends` 跨文件继承）；`--profiles-file` 可替换为外部整套配置
 4. 命令行 `--set 键=值`（可重复，点路径，值按 JSON/数字/布尔自动识别）
 
-**自定义配置**：写在 `config/custom.json` 或 `config/custom/*.json` 的 `profiles` 下（一配置一项），
+**自定义配置**：写在 `config/custom.yaml` 或 `config/custom/*.yaml` 的 `profiles` 下（一配置一项），
 多文件按文件名升序加载（忽略隐藏文件与子目录）、后加载者覆盖先加载者，且可 `extends` 更早文件中的同名配置。
-其中 `config/custom/*.json` 为本地配置目录，默认不入库（见 `.gitignore`，仅保留 `.gitkeep`）。示例：
+其中 `config/custom/*` 为本地配置目录，默认不入库（见 `.gitignore`，仅保留 `.gitkeep`）。示例：
 
-```jsonc
-{
-  "profiles": {
-    "简图": {
-      "description": "长画布（2:3），仅气温 + 降水，无标题，图例置底",
-      "figure": { "figsize": [8, 12], "title": { "show": false } },
-      "series": {
-        "minTemp": { "enabled": false },
-        "maxTemp": { "enabled": false },
-        "meanTemp": { "enabled": true, "label": "气温", "color": "#d62728" },
-        "rainfall": { "label": "降水", "color": "#1f77b4" }
-      },
-      "axes_primary": { "label_text": "气温" },
-      "axes_secondary": { "label_text": "降水" }
-    }
-  }
-}
+```yaml
+profiles:
+  简图:
+    description: 长画布（2:3），仅气温 + 降水，无标题，图例置底
+    figure:
+      figsize: [8, 12]
+      title: {show: false}
+    series:
+      minTemp: {enabled: false}
+      maxTemp: {enabled: false}
+      meanTemp: {enabled: true, label: 气温, color: "#d62728"}
+      rainfall: {label: 降水, color: "#1f77b4"}
+    axes_primary: {label_text: 气温}
+    axes_secondary: {label_text: 降水}
 ```
 
 **合并规则**：对象递归深合并；数组整体替换（不是拼接）；因此局部配置只需写想改的项。
+
+### YAML 语法要点
+
+| 事项 | 说明 |
+|---|---|
+| 缩进 | 只能用**空格**（建议 2 个），不能用 Tab；同级键左对齐 |
+| 层级 | 用缩进表示嵌套，替代 JSON 的大括号；可以任意深度混用行内写法 `{a: 1, b: 2}` 与 `[1, 2]` |
+| 字符串 | 一般无需引号；含 `:` `#` `{` `}` `[` `]` `,` 或以数字/布尔开头时请加引号 |
+| 类型陷阱 | `01`、`1.0`、`yes`/`no`/`on`/`off` 会被解析为数字/布尔，需按字面字符串用时请加引号（如 `month_label_style: "01"`） |
+| 注释 | 以 `#` 开头（行内 `值  # 说明` 亦可），可随配置一起保留，便于写备注 |
+| 多文档 | 不支持；一个文件一份 `profiles` / `styles` 结构 |
+| 兼容 | JSON 是 YAML 的子集，旧 `.json` 配置仍可读（`--profiles-file x.json`、`config/custom.json`、`config/custom/*.json`），但优先级低于 YAML |
 
 **配置内可用的继承与复用**：
 
@@ -172,9 +181,9 @@
 | `annotation.show_extremes` | bool | `false` | 是否标注极值月 |
 | `annotation.series` | str | `"meanTemp"` | 标注哪个元素的极值 |
 | `annotation.fontsize` / `color` / `show_value` | — | `9` / `#a32d2d` / `true` | 标注样式 |
-| `annotation.avoid_overlap` | bool | `true` | **自动避让**：极值标注会按候选位置搜索，避开数据曲线、另一条极值标注与平均降水线，并尽量不越出绘图区；设 `false` 恢复固定偏移 |
+| `annotation.avoid_overlap` | bool | `true` | **自动避让**：在候选位置里挑"冲突最少 → 越界最少 → 位移最小"的位置（避开数据曲线、另一条极值标注与平均降水线）。候选 = 偏好侧外推 × 横向错位（档位含按标注自身宽度自适应的值，长文案才挪得动）+ 翻到数据点另一侧，每个候选还会派生一个**最小幅度推回绘图区内**的版本，因此"贴近上下边界/首末月 + 小画布"时也不会掉出坐标区；设 `false` 恢复固定偏移 |
 | `annotation.gap` | float | `2.0` | 碰撞判定的安全间隙（点）；贴得比它更近也算撞上 |
-| `annotation.max_distance` | float | `52.0` | 位置搜索的半径上限（点） |
+| `annotation.max_distance` | float | `52.0` | 位置搜索的半径上限（点）：最终偏移的**横纵分量**都不超过它（含"推回绘图区内"产生的位移） |
 | `annotation.allow_flip` | bool | `true` | 是否允许翻到数据点另一侧（`false` 则最高始终在上、最低始终在下） |
 | `credit.show` | bool | `false` | 是否显示数据来源署名 |
 | `credit.text` | str 模板 | `"数据来源：世界天气信息服务网（WMO）"` | 署名文本 |

@@ -1,0 +1,238 @@
+# 内置多套绘图/表格配置（YAML）。
+# 所有配置都与内置默认值深合并，因此只需写想改的项。
+# 用法：python wmo_climate.py --profile <名称>；未指定则用 default_profile。
+# styles 为可复用的命名样式，配置里用 apply_styles 引用；完整配置项见 config/README.md。
+default_profile: default
+styles:
+  official_colors:
+    series:
+      minTemp: {color: '#0f91c4'}
+      maxTemp: {color: '#eb6877'}
+      meanTemp: {color: '#990000'}
+      rainfall: {color: '#46cbd4'}
+      raindays: {color: '#0f6e56'}
+  big_font:
+    figure:
+      font_size: 15
+      title: {fontsize: 22, pad: 18}
+      subtitle: {fontsize: 14}
+      legend: {fontsize: 14, markerscale: 1.4}
+    axes_primary: {label_fontsize: 16, tick_fontsize: 14}
+    axes_secondary: {label_fontsize: 16, tick_fontsize: 14}
+    axes_tertiary: {label_fontsize: 16, tick_fontsize: 14}
+    axes_x: {label_fontsize: 16, tick_fontsize: 14}
+  clean_paper:
+    figure:
+      facecolor: '#ffffff'
+      axes_facecolor: '#ffffff'
+      font_family: [SimSun, Microsoft YaHei, DejaVu Sans]
+      grid: {show: true, color: '#d8d8d8', linestyle: '-', linewidth: 0.6, alpha: 0.7}
+      legend: {frameon: false, loc: upper right, bbox_to_anchor: null}
+      title: {loc: left, color: '#111111', fontsize: 14}
+      credit: {show: true}
+    axes_primary: {label_color: '#111111', tick_color: '#333333', spine_color: '#999999'}
+    axes_secondary: {label_color: '#111111', tick_color: '#333333', spine_color: '#999999'}
+    axes_tertiary: {label_color: '#111111', tick_color: '#333333', spine_color: '#999999'}
+    axes_x: {label_color: '#111111', tick_color: '#333333', spine_color: '#999999'}
+    series:
+      minTemp: {linewidth: 1.6, marker: ''}
+      maxTemp: {linewidth: 1.6, marker: ''}
+      rainfall: {chart_type: bar, alpha: 0.55, bar_width: 0.6}
+profiles:
+  default: {description: 默认配置：官方页面风格（日均最低/最高气温 + 降水柱），双轴}
+  full:
+    description: 全元素：日均最低/最高/平均气温 + 降水柱 + 降水日数（第三轴）
+    apply_styles: [official_colors]
+    series:
+      meanTemp: {enabled: true, chart_type: line, linestyle: --, linewidth: 1.8}
+      raindays: {enabled: true, axis: tertiary, chart_type: smooth, marker: s}
+      rainfall:
+        data_labels: {show: true}
+    figure:
+      legend: {ncol: 5}
+      annotation: {show_extremes: true, series: meanTemp}
+    table:
+      rows: [minTemp, maxTemp, meanTemp, rainfall, raindays]
+      include_annual: true
+  compact:
+    description: 紧凑小图：适合嵌入文档或批量出图
+    figure:
+      figsize: [9.0, 4.6]
+      dpi: 120
+      font_size: 9.5
+      title: {show: true, fontsize: 13, pad: 10}
+      legend:
+        fontsize: 9
+        bbox_to_anchor: [0.5, -0.16]
+        frameon: false
+      grid: {alpha: 0.6}
+    output: {chart_dpi: 120}
+    series:
+      minTemp: {linewidth: 1.6, markersize: 3.6}
+      maxTemp: {linewidth: 1.6, markersize: 3.6}
+    axes_primary: {label_fontsize: 10.5, tick_fontsize: 9}
+    axes_secondary: {label_fontsize: 10.5, tick_fontsize: 9}
+    axes_x: {label_fontsize: 10.5, tick_fontsize: 9}
+  presentation:
+    description: 投屏演示：大画布、大字号、粗线条、带数据标签
+    apply_styles: [big_font]
+    figure:
+      figsize: [16.0, 9.0]
+      font_size: 15
+      title: {fontsize: 24, pad: 20}
+      subtitle: {show: true, text: '{member} · 统计时段 {period}', fontsize: 15}
+      legend:
+        fontsize: 15
+        loc: upper center
+        bbox_to_anchor: [0.5, -0.1]
+        markerscale: 1.5
+      grid: {linewidth: 1.0, alpha: 0.85}
+      credit: {show: true, fontsize: 11}
+    output:
+      chart_dpi: 160
+      chart_formats: [png, pdf]
+    series:
+      minTemp:
+        linewidth: 3.2
+        markersize: 7.5
+        data_labels: {show: false}
+      maxTemp:
+        linewidth: 3.2
+        markersize: 7.5
+        data_labels: {show: false}
+      rainfall:
+        bar_width: 0.62
+        data_labels: {show: true, fontsize: 11, format: '{:.0f}'}
+    axes_primary: {label_fontsize: 16, tick_fontsize: 14}
+    axes_secondary: {label_fontsize: 16, tick_fontsize: 14}
+    axes_x: {label_fontsize: 16, tick_fontsize: 14}
+  paper:
+    description: 学术论文：白底、无图例边框、左对齐标题、细线条、附数据来源
+    apply_styles: [clean_paper]
+    figure:
+      figsize: [13.0, 5.6]
+      credit: {show: true}
+    output:
+      chart_formats: [png, pdf, svg]
+      chart_dpi: 300
+  temp_only:
+    description: 纯气温图：只画气温（含日均气温），关闭降水轴
+    axes_secondary: {show: false}
+    axes_tertiary: {show: false}
+    axes_primary: {label_text: 气温 (°C)}
+    series:
+      meanTemp: {enabled: true, chart_type: smooth, linestyle: '-', linewidth: 2.0}
+      rainfall: {enabled: false}
+      raindays: {enabled: false}
+      maxTemp: {chart_type: fill_between, fill_between_key: minTemp, fill_alpha: 0.22, marker: ''}
+      minTemp: {chart_type: smooth, marker: ''}
+    figure:
+      legend: {ncol: 3}
+    table:
+      rows: [minTemp, maxTemp, meanTemp]
+  rain_only:
+    description: 纯降水图：降水量柱 + 降水日数折线，单轴
+    axes_secondary: {show: false}
+    axes_tertiary: {show: false}
+    axes_primary: {label_text: 降水量 (毫米) / 降水日数 (天), label_fontsize: 13}
+    series:
+      minTemp: {enabled: false}
+      maxTemp: {enabled: false}
+      meanTemp: {enabled: false}
+      rainfall:
+        enabled: true
+        axis: primary
+        chart_type: bar
+        color: '#4a9fd8'
+        data_labels: {show: true, format: '{:.0f}'}
+      raindays: {enabled: true, axis: primary, chart_type: smooth, scale_factor: 12.0, color: '#a32d2d'}
+    figure:
+      facecolor: '#f4f8fb'
+      legend: {ncol: 2, title: 注：降水日数已按 12 倍缩放以便同轴显示}
+    table:
+      rows: [rainfall, raindays]
+      include_annual: true
+  minimal:
+    description: 极简：无标题、无图例、无网格、无轴标题，仅保留曲线与月份刻度
+    figure:
+      title: {show: false}
+      subtitle: {show: false}
+      legend: {show: false}
+      grid: {show: false}
+      credit: {show: false}
+      figsize: [11.0, 4.2]
+    axes_primary: {label_text: ''}
+    axes_secondary: {label_text: ''}
+    axes_x: {label_text: ''}
+    table: {show_title_row: false, show_period_note: false, show_source_note: false}
+  seasonal:
+    description: 季节底色：按冬/春/夏/秋给月份加背景色带，并标注气温极值月
+    series:
+      meanTemp: {enabled: true, chart_type: smooth, linestyle: '-'}
+    figure:
+      background:
+        bands: {show: true, mode: season, alpha: 0.09}
+      annotation: {show_extremes: true, series: meanTemp, show_value: true}
+  alt_bands:
+    description: 隔月底色：偶数月加深底色，用于快速对位读数
+    figure:
+      background:
+        bands: {show: true, mode: alternate, alternate_alpha: 0.07}
+  yellow_black:
+    description: 高对比配色：适合打印或投影环境光较亮时使用
+    series:
+      minTemp: {color: '#1f6feb', linewidth: 2.6}
+      maxTemp: {color: '#d81b60', linewidth: 2.6}
+      rainfall: {color: '#f9a825', bar_edgecolor: '#8d6e00', bar_linewidth: 0.6}
+      raindays: {enabled: true, axis: tertiary, color: '#2e7d32', chart_type: smooth}
+    figure:
+      facecolor: '#ffffff'
+      axes_facecolor: '#ffffff'
+      grid: {color: '#bbbbbb', linestyle: ':', linewidth: 0.9}
+  annual_table:
+    description: 表格增强：含年均/年合计列，转置布局，精度 1 位，附脚注
+    table:
+      transpose: true
+      include_annual: true
+      precision: {temp: 1, rainfall: 1, raindays: 1, annual: 1}
+      show_period_note: true
+      show_source_note: true
+      show_title_row: true
+    data: {include_annual: true}
+    output:
+      table_formats: [csv, md, xlsx, json]
+  fahrenheit:
+    description: 英制单位：气温 °F、降水 英寸
+    data: {temp_unit: F, rain_unit: inch}
+    axes_primary: {label_text: 温度 (°F)}
+    axes_secondary: {label_text: 降水 (英寸)}
+    axes_tertiary: {label_text: 降水日数 (天)}
+  compare:
+    description: 多城市对比配置：默认对比日均气温，附范围内数值
+    compare:
+      metric: meanTemp
+      chart_type: smooth
+      figsize: [13.0, 6.4]
+      sort_by: value_desc
+      show_value_range: true
+      legend_ncol: 5
+      linewidth: 2.6
+      markersize: 5.5
+    figure:
+      title: {text: '{metric}对比 · {city}'}
+      subtitle: {show: true, text: '{member} · 统计时段 {period}'}
+      legend:
+        loc: upper center
+        bbox_to_anchor: [0.5, -0.1]
+        frameon: true
+        fontsize: 10.5
+      grid: {alpha: 0.8}
+    axes_primary: {label_text: 日均气温 (°C)}
+    output:
+      chart_formats: [png]
+  compare_rain:
+    description: 多城市对比（降水）：柱状对比平均总降水，按年合计排序
+    extends: compare
+    compare: {metric: rainfall, chart_type: bar, sort_by: value_desc, show_value_range: false, bar_width: 0.85}
+    axes_secondary: {label_text: 平均总降水 (毫米)}
+    data: {include_annual: true}

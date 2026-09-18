@@ -40,7 +40,7 @@ desktop.ini
 
 # ---- 本地配置 ----
 # --init-profile 导出的个人配置模板，不入库
-config/my_style.json
+config/my_style.yaml
 
 # ---- 工具元数据 ----
 # .workbuddy 为本地工具的项目记忆与配置，含机器相关信息（本地路径、代理等），

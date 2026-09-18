@@ -19,6 +19,7 @@ import traceback
 from pathlib import Path
 
 import numpy as np
+import yaml
 from matplotlib.text import Text
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,10 +31,12 @@ from src.city_index import CityIndex, CityEntry, _flatten  # noqa: E402
 from src.config_loader import (  # noqa: E402
     ConfigError,
     DEFAULTS,
+    dump_config,
     load_config,
     load_profiles_file,
     resolve_profile,
     validate_config,
+    write_template,
 )
 from src.models import month_label, normalize_series_key  # noqa: E402
 from src.parser import (  # noqa: E402
@@ -219,30 +222,37 @@ def test_config_unknown_key_warning() -> None:
 
 
 def test_custom_config_multi_file() -> None:
-    """自定义配置支持多文件：按上下顺序加载，后者可 extends 前者。"""
+    """自定义配置支持多文件（YAML）：按上下顺序加载，后者可 extends 前者；旧 JSON 兼容且优先级更低。"""
     import src.config_loader as cl
 
     tmp = ROOT / "tests" / "_output" / "custom_test"
     tmp.mkdir(parents=True, exist_ok=True)
-    (tmp / "00_base.json").write_text(
-        json.dumps({"profiles": {"c_base": {"figure": {"figsize": [1, 1], "dpi": 10}}}}),
+    for stale in tmp.iterdir():          # 清理上次运行的残留，保证结果可复现
+        if stale.is_file():
+            stale.unlink()
+
+    (tmp / "00_base.yaml").write_text(
+        "profiles:\n  c_base:\n    figure: {figsize: [1, 1], dpi: 10}\n", encoding="utf-8")
+    (tmp / "01_derived.yaml").write_text(
+        "profiles:\n  c_sub:\n    extends: c_base\n    figure: {dpi: 99}\n", encoding="utf-8")
+    (tmp / "10_dup_a.yaml").write_text(
+        "profiles:\n  c_dup:\n    figure: {dpi: 11}\n", encoding="utf-8")
+    (tmp / "10_dup_b.yaml").write_text(
+        "profiles:\n  c_dup:\n    figure: {dpi: 22}\n", encoding="utf-8")
+    # 旧 JSON 配置仍可读取（JSON 是 YAML 子集），但同名 YAML 覆盖之
+    (tmp / "20_legacy.json").write_text(
+        json.dumps({"profiles": {"c_legacy": {"figure": {"dpi": 33}},
+                                 "c_dup": {"figure": {"dpi": 44}}}}),
         encoding="utf-8")
-    (tmp / "01_derived.json").write_text(
-        json.dumps({"profiles": {"c_sub": {"extends": "c_base", "figure": {"dpi": 99}}}}),
-        encoding="utf-8")
-    (tmp / "10_dup_a.json").write_text(
-        json.dumps({"profiles": {"c_dup": {"figure": {"dpi": 11}}}}), encoding="utf-8")
-    (tmp / "10_dup_b.json").write_text(
-        json.dumps({"profiles": {"c_dup": {"figure": {"dpi": 22}}}}), encoding="utf-8")
 
     saved_dir, saved_file = cl.CUSTOM_PROFILES_DIR, cl.CUSTOM_PROFILES_PATH
     cl.CUSTOM_PROFILES_DIR = tmp
-    cl.CUSTOM_PROFILES_PATH = ROOT / "config" / "nonexistent_custom.json"
+    cl.CUSTOM_PROFILES_PATH = ROOT / "config" / "nonexistent_custom.yaml"
     try:
         doc = load_profiles_file()
         profiles = doc.get("profiles") or {}
         check("多文件自定义配置均被加载",
-              {"c_base", "c_sub", "c_dup"} <= set(profiles),
+              {"c_base", "c_sub", "c_dup", "c_legacy"} <= set(profiles),
               str(sorted(profiles.keys())))
         base = resolve_profile("c_base", doc)
         check("前序配置 c_base 保留 figsize", base["figure"]["figsize"] == [1, 1],
@@ -257,9 +267,45 @@ def test_custom_config_multi_file() -> None:
         dup = resolve_profile("c_dup", doc)
         check("同名配置按上下顺序覆盖（后序 dpi=22）", dup["figure"]["dpi"] == 22,
               str(dup["figure"]["dpi"]))
+        check("旧 JSON 配置仍可加载（dpi=33）",
+              resolve_profile("c_legacy", doc)["figure"]["dpi"] == 33,
+              str(resolve_profile("c_legacy", doc)["figure"]["dpi"]))
     finally:
         cl.CUSTOM_PROFILES_DIR = saved_dir
         cl.CUSTOM_PROFILES_PATH = saved_file
+
+
+def test_config_files_are_yaml() -> None:
+    """配置一律为 YAML：内置/自定义配置文件、--show-config 与 --init-profile 输出均为 YAML。"""
+    import src.config_loader as cl
+
+    check("内置配置改用 YAML", cl.DEFAULT_PROFILES_PATH.suffix == ".yaml"
+          and cl.DEFAULT_PROFILES_PATH.is_file(), str(cl.DEFAULT_PROFILES_PATH))
+    check("自定义配置改用 YAML", cl.CUSTOM_PROFILES_PATH.suffix == ".yaml"
+          and cl.CUSTOM_PROFILES_PATH.is_file(), str(cl.CUSTOM_PROFILES_PATH))
+    check("config 下已无旧 JSON 配置",
+          not list((ROOT / "config").glob("*.json"))
+          and not list((ROOT / "config" / "custom").glob("*.json")),
+          str([str(p) for p in (ROOT / "config").glob("*.json")]))
+
+    check("YAML 配置可解析 default_profile",
+          (load_profiles_file().get("default_profile")) == "default")
+
+    tmp = ROOT / "tests" / "_output" / "custom_test"
+    tmp.mkdir(parents=True, exist_ok=True)
+    template = write_template(tmp / "tpl.yaml", load_config("compact"))
+    payload = yaml.safe_load(template.read_text(encoding="utf-8"))
+    check("--init-profile 模板为合法 YAML", isinstance(payload, dict)
+          and payload.get("profile_name") == "compact", str(template))
+    check("模板含全量可配置分组",
+          all(key in payload for key in ("data", "fetch", "output", "figure",
+                                         "axes_primary", "series", "table", "compare")))
+    dumped = yaml.safe_load(dump_config(load_config("compact")))
+    check("--show-config 输出为合法 YAML",
+          isinstance(dumped, dict) and dumped["figure"]["figsize"] == [9.0, 4.6],
+          str(dumped.get("figure", {}).get("figsize")))
+    check("导出的模板不含内部键",
+          not any(str(k).startswith("_") for k in payload), str(sorted(payload)[:3]))
 
 
 # ======================= 3. 表格层 =======================
@@ -498,6 +544,8 @@ def _extreme_overlaps(fig) -> list:
     ab = ax.get_window_extent()
     if any(b.x0 < ab.x0 or b.x1 > ab.x1 for b in raw):     # 越界看裸文字盒
         notes.append("横向越界")
+    if any(b.y0 < ab.y0 or b.y1 > ab.y1 for b in raw):
+        notes.append("纵向越界")
     return notes
 
 
@@ -576,6 +624,37 @@ def test_extremes_label_avoidance() -> None:
     check("最低标注锚点=最低月数据点",
           abs(lo_anno.xy[0] - lo) < 1e-6 and abs(lo_anno.xy[1] - values[lo]) < 1e-6,
           str(lo_anno.xy))
+    chart_mod.plt.close(fig)
+
+
+def test_extremes_label_avoidance_cramped_axis() -> None:
+    """小画布 + 固定量程下，最低月标注必须留在绘图区内（乌兰巴托 + 简图系配置）。
+
+    该组合把标注空间压得很窄：最低月气温 -20.8 落在固定量程 -30~30 的下沿附近，
+    平均降水线（22.5 mm）又正好横在文字下方，再往下挪一档就整体掉出坐标区底边
+    （实测会压住月份刻度）。旧算法只能二选一（压线 / 出界），现在会额外派生
+    "最小幅度推回区内"的候选，保证有解时不出界。
+    """
+    from src import chart as chart_mod
+
+    for profile in ("横1", "横150", "横300", "横900", "简2"):
+        fig = _render_figure(load_config(profile), city_any(229))
+        notes = _extreme_overlaps(fig)
+        annos = [t for a in fig.axes for t in a.texts
+                 if "最高" in t.get_text() or "最低" in t.get_text()]
+        annos.sort(key=lambda t: 0 if "最高" in t.get_text() else 1)
+        offs = [[round(float(v), 1) for v in t.xyann] for t in annos]
+        check(f"{profile}：乌兰巴托极值标注不越界不压线", notes == [], f"{notes} 偏移={offs}")
+        if profile == "横300":
+            check("横300：最低标注仍留在数据点下方（未翻边）",
+                  len(offs) == 2 and offs[1][1] < 0, str(offs))
+        chart_mod.plt.close(fig)
+
+    # 关闭避让时确实越界（证明这个用例考的就是避让逻辑本身）
+    cfg = load_config("横300", None, [("figure.annotation.avoid_overlap", False)])
+    fig = _render_figure(cfg, city_any(229))
+    check("横300：关闭避让时最低标注确实越界", _extreme_overlaps(fig) != [],
+          str(_extreme_overlaps(fig)))
     chart_mod.plt.close(fig)
 
 
@@ -1111,6 +1190,7 @@ def main() -> int:
     run("配置层：非法配置报错", test_config_errors)
     run("配置层：未知配置项告警", test_config_unknown_key_warning)
     run("配置层：自定义配置多文件继承", test_custom_config_multi_file)
+    run("配置层：配置一律为 YAML", test_config_files_are_yaml)
     run("表格层：基础四格式", lambda: test_tables(tmp))
     run("表格层：变体（年列/英制/极简/空值）", lambda: test_tables_variants(tmp))
     run("绘图层：全部配置渲染", test_all_profiles_render)
@@ -1120,6 +1200,7 @@ def main() -> int:
     run("绘图层：季节色带半球反季", test_seasonal_bands_hemisphere)
     run("绘图层：平均降水线", test_mean_rain_line)
     run("绘图层：极值标注自动避让", test_extremes_label_avoidance)
+    run("绘图层：极值标注窄空间避让", test_extremes_label_avoidance_cramped_axis)
     run("绘图层：多城市对比", test_compare_render)
     run("城市索引：反查与筛选", test_city_index_flatten)
     run("CLI：批量目标解析", test_cli_batch_targets)
