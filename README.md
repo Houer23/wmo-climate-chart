@@ -127,7 +127,7 @@ DrawClimateChart/
 │   └── pipeline.py           # 编排：单城 / 批量 / 对比
 ├── scripts/                  # 可复用工具（夹具抓取 / CLI 验收 / 缺失值扫描）
 ├── tests/
-│   ├── test_regression.py    # 回归测试（离线可跑，257 项断言）
+│   ├── test_regression.py    # 回归测试（离线可跑，275 项断言）
 │   ├── fixtures/             # 真实响应样本（含城市索引与 samples/ 抽样数据）
 │   └── _output/              # 测试产物：渲染核对图 / 表格中间输出（不入库）
 ├── output/                   # 交付物：表格与图（生成物，不入库）
@@ -213,7 +213,9 @@ profiles:
 默认文件名模板：**图片**用 `{city}_{city_id}_climate_{profile}`（**以配置名作后缀**，如 `北京_237_climate_简图.png`），
 **表格**用 `{city}_{city_id}_climate`（不带后缀，如 `北京_237_climate.xlsx`）。
 分别由 `output.name_template` / `output.table_name_template` 调整
-（占位符：`{city}` `{city_id}` `{member}` `{station}` `{profile}`；对比图另有 `{city_count}` `{metric}`）。
+（占位符：`{city}` `{city_id}` `{member}` `{station}` `{profile}` `{lat}` `{lon}`；对比图另有 `{city_count}` `{metric}`）。
+经纬度文案由 `data.coord` 决定（方向符号 `E/W/N/S` 或 `东/西/南/北`、是否带单位、单位用 `°` 还是 `度`、小数位；
+也可切换为"纯数字、西经/南纬为负"），默认输出如 `39.93°N` `116.28°E`。
 
 - **表格**：CSV（UTF-8 BOM，Excel 直接打开不乱码）、Markdown、XLSX、JSON
 - **图**：PNG（默认）/ SVG / PDF；SVG 与 PDF 中的文字保持为**可编辑文本对象**，可直接在 Illustrator / Inkscape 中改字（`figure.svg_fonttype` / `figure.pdf_fonttype` 可切换为轮廓路径）

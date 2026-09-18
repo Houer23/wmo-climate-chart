@@ -8,6 +8,9 @@
    不在解析阶段做单位换算，避免精度损失与口径混淆。
 3. 所有数值在解析阶段统一为 ``float | None``，空串 / "NULL" / 缺失一律为 None，
    由上层按 ``data.fill_missing`` 策略决定如何呈现。
+4. 经纬度同样以 **数值**（``float | None``）保存（数据源给的是 ``"39.933333000"`` 这类
+   字符串，解析阶段即转成数）；显示文案一律由 :func:`format_coord` / :func:`coord_pair`
+   按配置 ``data.coord`` 现算，不在模型里固化格式。
 """
 
 from __future__ import annotations
@@ -226,10 +229,9 @@ class CityClimate:
         org = self.member.org_name or self.member.mem_name
         return f"数据来源：世界天气信息服务网（WMO）{('· ' + org) if org else ''}"
 
-    def location_label(self) -> str:
-        if self.latitude is None or self.longitude is None:
-            return ""
-        return f"{self.latitude:.2f}°, {self.longitude:.2f}°"
+    def location_label(self, cfg: Optional[dict[str, Any]] = None) -> str:
+        """经纬度成对文案（纬度在前），按 ``data.coord`` 配置格式化。"""
+        return coord_pair(self.latitude, self.longitude, cfg)
 
     # ---- 序列化 ---------------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
@@ -267,6 +269,94 @@ class CityClimate:
                 for mo in self.months
             ],
         }
+
+
+# ---- 经纬度显示 --------------------------------------------------------
+#: 方向符号：(正方向, 负方向)——南纬/西经为负。``{lat}`` 取 N/S，``{lon}`` 取 E/W。
+COORD_DIRECTION_LABELS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
+    "lat": ({"letter": "N", "hanzi": "北"}, {"letter": "S", "hanzi": "南"}),
+    "lon": ({"letter": "E", "hanzi": "东"}, {"letter": "W", "hanzi": "西"}),
+}
+
+#: ``data.coord`` 的默认值（与 ``config_loader.DEFAULTS`` 保持一致）
+COORD_DEFAULTS: dict[str, Any] = {
+    "style": "direction",     # direction(带方向符号) | signed(纯数字，西经/南纬为负)
+    "direction": "letter",    # letter(E/W/N/S) | hanzi(东/西/南/北)
+    "unit": True,             # 是否带单位
+    "unit_text": "°",         # 单位文案：° 或 度
+    "decimals": 2,            # 小数位
+}
+
+#: 取值别名（配置里也允许写中文），供校验与格式化共用
+COORD_STYLE_ALIASES = {"direction": "direction", "带方向": "direction",
+                       "signed": "signed", "纯数字": "signed"}
+COORD_DIRECTION_ALIASES = {"letter": "letter", "字母": "letter",
+                           "hanzi": "hanzi", "汉字": "hanzi"}
+
+
+def normalize_coord_option(value: Any, aliases: dict[str, str], default: str = "") -> str:
+    """把 ``data.coord`` 里的取值（含中文别名、大小写）归一为规范键；无法识别返回 default。"""
+    text = str(value).strip()
+    if text in aliases:
+        return aliases[text]
+    return aliases.get(text.lower(), default)
+
+
+def coord_options(cfg: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    """取出 ``data.coord`` 配置并按默认值补齐（缺项 / 旧配置都能用）。"""
+    options = dict(COORD_DEFAULTS)
+    node = ((cfg or {}).get("data") or {}).get("coord")
+    if isinstance(node, dict):
+        options.update({k: v for k, v in node.items() if v is not None})
+    return options
+
+
+def format_coord(value: Optional[float], kind: str, cfg: Optional[dict[str, Any]] = None) -> str:
+    """把**数值**经纬度按 ``data.coord`` 配置格式化为可显示文案。
+
+    ``kind`` 取 ``"lat"``（北/南、N/S）或 ``"lon"``（东/西、E/W）；值为 ``None``
+    （数据源缺经纬度）时返回空串。方向符号一律在数字之后：
+
+    ====================  ==============================
+    ``direction`` + 字母  ``106.87°E`` / ``33.87°S``
+    ``direction`` + 汉字  ``106.87°东`` / ``33.87°南``
+    ``direction`` 不带单位 ``106.87E``
+    ``signed``（纯数字）  ``106.87°`` / ``-33.87°``（西经、南纬为负）
+    单位为汉字            ``106.87度E`` / ``33.87度南``
+    ====================  ==============================
+    """
+    if value is None:
+        return ""
+    options = coord_options(cfg)
+    try:
+        decimals = max(0, int(options.get("decimals", 2)))
+    except (TypeError, ValueError):
+        decimals = 2
+    unit = ""
+    if options.get("unit", True):
+        unit = str(options.get("unit_text", "°") or "")
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return ""
+    if normalize_coord_option(options.get("style"), COORD_STYLE_ALIASES, "direction") == "signed":
+        return f"{number:.{decimals}f}{unit}"
+    sides = COORD_DIRECTION_LABELS["lat" if str(kind).lower().startswith("lat") else "lon"]
+    label = sides[0] if number >= 0 else sides[1]
+    if normalize_coord_option(options.get("direction"), COORD_DIRECTION_ALIASES,
+                              "letter") == "hanzi":
+        return f"{abs(number):.{decimals}f}{unit}{label['hanzi']}"
+    return f"{abs(number):.{decimals}f}{unit}{label['letter']}"
+
+
+def coord_pair(latitude: Optional[float], longitude: Optional[float],
+               cfg: Optional[dict[str, Any]] = None, separator: str = ", ") -> str:
+    """经纬度成对文案（**纬度在前**）；任一缺失返回空串。"""
+    lat = format_coord(latitude, "lat", cfg)
+    lon = format_coord(longitude, "lon", cfg)
+    if not lat or not lon:
+        return ""
+    return f"{lat}{separator}{lon}"
 
 
 # ---- 月份标签 ----------------------------------------------------------

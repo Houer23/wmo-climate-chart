@@ -19,7 +19,7 @@ from matplotlib.text import Text  # noqa: E402
 from matplotlib.ticker import FuncFormatter, MaxNLocator  # noqa: E402
 from matplotlib.transforms import Bbox  # noqa: E402
 
-from .models import CityClimate, normalize_series_key  # noqa: E402
+from .models import CityClimate, format_coord, normalize_series_key  # noqa: E402
 
 TEMP_KEYS = ("minTemp", "maxTemp", "meanTemp")
 RAIN_KEYS = ("rainfall", "raindays")
@@ -932,8 +932,9 @@ def _context(city: CityClimate, cfg: dict[str, Any]) -> dict[str, str]:
         "member": city.member.mem_name,
         "org": city.member.org_name,
         "period": city.period_note(),
-        "lat": f"{city.latitude:.2f}" if city.latitude is not None else "",
-        "lon": f"{city.longitude:.2f}" if city.longitude is not None else "",
+        # 经纬度：模型里存的是数值，显示文案按 data.coord 现算（方向符号/单位/小数位可配）
+        "lat": format_coord(city.latitude, "lat", cfg),
+        "lon": format_coord(city.longitude, "lon", cfg),
         "profile": str(cfg.get("profile_name", "")),
         "temp_unit": "°F" if (cfg["data"].get("temp_unit") or "C").upper() == "F" else "°C",
         "rain_unit": city.rain_unit_label(),

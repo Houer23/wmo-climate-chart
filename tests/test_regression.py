@@ -155,6 +155,73 @@ def test_month_label_and_alias() -> None:
     check("元素别名 大小写", normalize_series_key("RAINFALL") == "rainfall")
 
 
+def test_coord_formatting() -> None:
+    """经纬度：内部存数值，显示文案按 data.coord 现算（方向符号/单位/小数位可配）。"""
+    from src import chart as chart_mod
+    from src.chart import _context
+    from src.models import coord_pair, format_coord
+    from src.pipeline import output_basename
+
+    check("默认：字母方向符号跟在数字后",
+          format_coord(116.283333, "lon") == "116.28°E"
+          and format_coord(39.933333, "lat") == "39.93°N",
+          f"{format_coord(116.283333, 'lon')} {format_coord(39.933333, 'lat')}")
+    check("南纬/西经换用 S/W",
+          format_coord(-33.87, "lat") == "33.87°S" and format_coord(-70.66, "lon") == "70.66°W",
+          f"{format_coord(-33.87, 'lat')} {format_coord(-70.66, 'lon')}")
+    check("0 度按正方向显示", format_coord(0.0, "lat") == "0.00°N", format_coord(0.0, "lat"))
+
+    signed = {"data": {"coord": {"style": "signed"}}}
+    check("纯数字模式：西经/南纬为负",
+          format_coord(-33.87, "lat", signed) == "-33.87°"
+          and format_coord(116.28, "lon", signed) == "116.28°",
+          f"{format_coord(-33.87, 'lat', signed)} {format_coord(116.28, 'lon', signed)}")
+    hanzi = {"data": {"coord": {"direction": "hanzi"}}}
+    check("汉字方向符号",
+          format_coord(116.28, "lon", hanzi) == "116.28°东"
+          and format_coord(-33.87, "lat", hanzi) == "33.87°南",
+          f"{format_coord(116.28, 'lon', hanzi)} {format_coord(-33.87, 'lat', hanzi)}")
+    check("可关闭单位",
+          format_coord(116.28, "lon", {"data": {"coord": {"unit": False}}}) == "116.28E")
+    check("单位可换成汉字",
+          format_coord(116.28, "lon", {"data": {"coord": {"unit_text": "度"}}}) == "116.28度E")
+    check("小数位可配",
+          format_coord(116.2833, "lon", {"data": {"coord": {"decimals": 4}}}) == "116.2833°E")
+    check("配置取值可用中文别名",
+          format_coord(-33.87, "lat", {"data": {"coord": {"style": "纯数字",
+                                                          "direction": "字母"}}}) == "-33.87°")
+    check("缺经纬度返回空串", format_coord(None, "lon") == "")
+    check("成对文案：纬度在前、任一缺失为空串",
+          coord_pair(39.933333, 116.283333) == "39.93°N, 116.28°E" and coord_pair(None, 116.28) == "",
+          coord_pair(39.933333, 116.283333))
+
+    # 落到模板：{lat} / {lon} 进标题（格式跟随配置），文件名模板同样可用（此前会 KeyError）
+    bj = city(237)
+    cfg = load_config(None, None, [("figure.title.text", "{lat} / {lon}"),
+                                   ("output.name_template", "{city}_{lon}"),
+                                   ("data.coord.direction", "hanzi")])
+    context = _context(bj, cfg)
+    check("{lat}/{lon} 上下文按配置给出",
+          context["lat"] == "39.93°北" and context["lon"] == "116.28°东",
+          f"{context['lat']} / {context['lon']}")
+    fig = _render_figure(cfg, bj)
+    check("标题模板可渲染 {lat}/{lon}",
+          fig.axes[0].get_title() == "39.93°北 / 116.28°东", fig.axes[0].get_title())
+    chart_mod.plt.close(fig)
+    check("文件名模板支持 {lat}/{lon}（不再 KeyError）",
+          output_basename(cfg, bj) == "北京_116.28°东", output_basename(cfg, bj))
+
+    # 非法取值直接报错
+    for key, value in (("style", "x"), ("direction", "x"), ("decimals", "a"), ("decimals", -1)):
+        bad = load_config(None, None, [(f"data.coord.{key}", value)])
+        try:
+            validate_config(bad)
+        except ConfigError as exc:
+            check(f"非法 coord.{key}={value!r} 报错", key in str(exc), str(exc))
+        else:
+            check(f"非法 coord.{key}={value!r} 报错", False, "未抛出")
+
+
 # ======================= 2. 配置层 =======================
 
 def test_config_merge_and_set() -> None:
@@ -1185,6 +1252,7 @@ def main() -> int:
     run("解析层：缺失值处理", test_missing_values)
     run("解析层：无气候数据城市", test_no_climate_city)
     run("解析层：月份标签与元素别名", test_month_label_and_alias)
+    run("显示层：经纬度格式", test_coord_formatting)
     run("配置层：深合并与 --set", test_config_merge_and_set)
     run("配置层：多套配置解析", test_profiles_resolution)
     run("配置层：非法配置报错", test_config_errors)

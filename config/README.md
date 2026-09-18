@@ -54,12 +54,16 @@ profiles:
 | `apply_styles` | 引用 `styles` 中定义的命名样式（可复用的一组设置） |
 | `styles`（顶层） | 命名样式集合，如 `official_colors`、`big_font`、`clean_paper` |
 
-**占位符模板**（用于 `title.text`、`subtitle.text`、文件名等）：
+**占位符模板**（用于 `title.text`、`subtitle.text`、`credit.text`、文件名等）：
 
 `{city}` 城市名 · `{city_id}` 编号 · `{member}` 国家/地区 · `{org}` 气象机构 ·
 `{station}` 测站名 · `{period}` 统计时段 · `{lat}` `{lon}` 经纬度 ·
 `{temp_unit}` 温度单位 · `{rain_unit}` 降水单位 · `{profile}` 配置名 ·
 对比图另支持 `{metric}`（对比元素名）· `{city_count}`（城市数）
+
+> `{lat}` / `{lon}` 的**显示文案由 `data.coord` 决定**（方向符号、单位、小数位），
+> 数据本身始终是数值：例如默认输出 `39.93°N` / `116.28°E`，`style: signed` 时为
+> `39.93°` / `116.28°`，南纬/西经为负。经纬度的先后顺序由模板自己决定（如 `{lon}/{lat}`）。
 
 ---
 
@@ -75,6 +79,22 @@ profiles:
 | `month_label_style` | str | `"1月"` | 月份标签：`1月` / `一月` / `Jan` / `01` |
 | `include_annual` | bool | `false` | 表格与图表是否附加年值（温度取月均，降水取累加） |
 | `auto_disable_empty_series` | bool | `true` | 某元素在该城市全无数据时自动不绘制（如纯气温城市自动去掉降水柱） |
+| `coord.style` | str | `"direction"` | **经纬度显示方式**：`direction` 带方向符号（南纬/西经靠 S/W 区分） / `signed` 纯数字（西经、南纬为**负数**）；也接受中文 `带方向` / `纯数字`。作用于 `{lat}` `{lon}` 占位符与 `--list-cities` 坐标列 |
+| `coord.direction` | str | `"letter"` | 方向符号形式（`coord.style=direction` 时生效）：`letter` = `E`/`W`/`N`/`S`（**默认**） / `hanzi` = `东`/`西`/`南`/`北`；也接受中文 `字母` / `汉字` |
+| `coord.unit` | bool | `true` | 是否带单位 |
+| `coord.unit_text` | str | `"°"` | 单位文案：默认为符号 `°`，可设为 `度` |
+| `coord.decimals` | int | `2` | 小数位（≥ 0） |
+
+**`coord` 输出示例**（经度 116.2833，纬度 -33.87，方向符号一律在数字之后）：
+
+| 配置 | 经度 | 纬度 |
+|---|---|---|
+| 默认（`direction` + `letter` + `°`） | `116.28°E` | `33.87°S` |
+| `direction: hanzi` | `116.28°东` | `33.87°南` |
+| `unit: false` | `116.28E` | `33.87S` |
+| `unit_text: 度` | `116.28度E` | `33.87度南` |
+| `style: signed` | `116.28°` | `-33.87°` |
+| `decimals: 4` | `116.2833°E` | `33.8700°S` |
 
 ## B. `fetch` — 请求层
 

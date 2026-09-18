@@ -61,6 +61,7 @@ from src.config_loader import (
     write_template,
 )
 from src.http_client import FetchError
+from src.models import coord_pair
 from src.pipeline import (
     list_cities as list_cities_fn,
     resolve_city_ids,
@@ -262,8 +263,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         print(f"{'cityId':>8}  {'城市':<18} {'国家/地区':<14} 坐标")
         for entry in entries:
-            coords = (f"{entry.latitude:.2f}, {entry.longitude:.2f}"
-                      if entry.latitude is not None and entry.longitude is not None else "")
+            # 坐标列与 {lat} / {lon} 占位符共用一套显示口径（data.coord）
+            coords = coord_pair(entry.latitude, entry.longitude, cfg)
             print(f"{entry.city_id:>8}  {entry.city_name:<18} {entry.mem_name:<14} {coords}")
         return 0
 

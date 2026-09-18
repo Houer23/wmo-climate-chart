@@ -22,7 +22,12 @@ from typing import Any, Optional
 
 import yaml
 
-from .models import normalize_series_key
+from .models import (
+    COORD_DIRECTION_ALIASES,
+    COORD_STYLE_ALIASES,
+    normalize_coord_option,
+    normalize_series_key,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -142,6 +147,13 @@ DEFAULTS: dict[str, Any] = {
         "month_label_style": "1月",        # 1月 | 一月 | Jan | 01
         "include_annual": False,           # 表格/图表是否附年值
         "auto_disable_empty_series": True, # 某元素全无数据时自动不绘制
+        "coord": {                         # 经纬度显示（{lat} / {lon} 占位符、坐标列）
+            "style": "direction",          # direction(带方向符号) | signed(纯数字，西经/南纬为负)
+            "direction": "letter",         # letter(E/W/N/S) | hanzi(东/西/南/北)
+            "unit": True,                  # 是否带单位
+            "unit_text": "°",              # 单位文案：° 或 度
+            "decimals": 2,                 # 小数位
+        },
     },
 
     # ================= B. 请求层 =================
@@ -871,6 +883,25 @@ def validate_config(cfg: dict[str, Any]) -> list[str]:
     if line_side not in ("above", "below", "center"):
         raise ConfigError("figure.mean_rain_line.annotate_side 只能是 above / below / center"
                           f"（当前：{line_cfg.get('annotate_side')}）")
+
+    # 7) 经纬度显示（{lat} / {lon} 占位符与坐标列）
+    coord = cfg["data"].get("coord")
+    if coord is not None and not isinstance(coord, dict):
+        raise ConfigError("data.coord 必须是对象")
+    coord = coord or {}
+    if not normalize_coord_option(coord.get("style", "direction"), COORD_STYLE_ALIASES):
+        raise ConfigError("data.coord.style 只能是 direction（带方向符号，默认）"
+                          f"或 signed（纯数字，西经/南纬为负）（当前：{coord.get('style')}）")
+    if not normalize_coord_option(coord.get("direction", "letter"), COORD_DIRECTION_ALIASES):
+        raise ConfigError("data.coord.direction 只能是 letter（E/W/N/S，默认）"
+                          f"或 hanzi（东/西/南/北）（当前：{coord.get('direction')}）")
+    try:
+        decimals = int(coord.get("decimals", 2))
+    except (TypeError, ValueError) as exc:
+        raise ConfigError("data.coord.decimals 必须是整数"
+                          f"（当前：{coord.get('decimals')!r}）") from exc
+    if decimals < 0:
+        raise ConfigError(f"data.coord.decimals 不能为负数（当前：{decimals}）")
 
     return warnings
 

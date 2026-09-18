@@ -18,7 +18,7 @@ from .http_client import (
     city_data_url,
     city_page_url,
 )
-from .models import CityClimate
+from .models import CityClimate, format_coord
 from .parser import NoClimateDataError, ParseError, parse_city_text
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -119,6 +119,9 @@ def _format_basename(cfg: dict[str, Any], city: CityClimate, key: str, default: 
         member=city.member.mem_name,
         station=city.station_name,
         profile=cfg.get("profile_name", ""),
+        # 文档已声明 {lat} / {lon} 可用于文件名模板，这里补齐（否则 .format 会抛 KeyError）
+        lat=format_coord(city.latitude, "lat", cfg),
+        lon=format_coord(city.longitude, "lon", cfg),
     ))
 
 
