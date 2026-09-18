@@ -549,19 +549,23 @@ def _nudge_off_tick_labels(ax, anno, gap_pt: float = 2.0, passes: int = 3) -> fl
 
 
 def _draw_mean_rain_line(axis_map: dict[str, Any], city: CityClimate,
-                         cfg: dict[str, Any]) -> Optional[Any]:
+                         cfg: dict[str, Any]) -> tuple[Optional[Any], Optional[Any]]:
     """平均降水线：把 12 个月降水量取平均，画一条水平参考线。
 
     默认不绘制（``figure.mean_rain_line.show = false``），需在配置中显式开启。
     画在降水柱所在的轴（``axis=auto`` 跟随 ``series.rainfall.axis``）且层级高于柱子，
     因此不会被柱子盖住；该城市降水全缺或所在轴未启用时静默跳过。
+
+    返回 ``(线, 标注或 None)``：标注在这里只创建、不定最终位置——它的横纵落点都要量取
+    坐标区与刻度标签的实际几何，须由 ``_place_mean_rain_annotation`` 在**布局定型后**
+    放置（原因见该函数说明）。
     """
     mcfg = cfg["figure"].get("mean_rain_line") or {}
     if not mcfg.get("show"):
-        return None
+        return None, None
     mean = _mean_rainfall(city, cfg)
     if mean is None:
-        return None
+        return None, None
 
     axis_name = str(mcfg.get("axis", "auto") or "auto").lower()
     if axis_name == "auto":
@@ -569,7 +573,7 @@ def _draw_mean_rain_line(axis_map: dict[str, Any], city: CityClimate,
                         .get("axis", "secondary")).lower()
     target = axis_map.get(axis_name)
     if target is None:
-        return None
+        return None, None
 
     rain_cfg = (cfg.get("series") or {}).get("rainfall") or {}
     color = _pick(mcfg.get("color"), _pick(rain_cfg.get("color"), "#46cbd4"))
@@ -583,43 +587,60 @@ def _draw_mean_rain_line(axis_map: dict[str, Any], city: CityClimate,
         zorder=zorder, label=label or None,
     )
 
+    anno = None
     if mcfg.get("annotate", True):
         text = str(mcfg.get("annotate_template", "{label} {value:.1f} {unit}")).format(
             label=label, value=mean, unit=_rain_unit_text(city, cfg),
             city=city.city_name, station=city.station_name or city.city_name,
         )
         if text.strip():
-            # 落点：横向锚到绘图区左/中/右（轴宽比例），或 ``ticks`` 贴到该轴刻度标签那一列；
-            # 纵向锚到均值线：``above``/``below`` 把文字底/顶边离开线 dy 点，``center`` 则让
-            # 文字垂直中心正落在线上（此时 offset 的纵向分量不生效）。
-            position = str(mcfg.get("annotate_position", "right") or "right").lower()
-            if position not in ("left", "center", "right", "ticks"):
-                position = "right"
-            side = str(mcfg.get("annotate_side", "above") or "above").lower()
-            below, centered = side == "below", side == "center"
-            offset = mcfg.get("annotate_offset") or [0.0, 4.0]
-            try:
-                dx, dy = float(offset[0]), abs(float(offset[1]))
-            except (TypeError, ValueError, IndexError):
-                dx, dy = 0.0, 4.0
-            if position == "ticks":
-                x_frac, ha, dx_column = _tick_label_column(target)
-                dx += dx_column          # 横向落到刻度标签列；dx 仍可继续微调
-            else:
-                x_frac, ha = {"left": (0.0, "left"), "center": (0.5, "center"),
-                              "right": (1.0, "right")}[position]
             anno = target.annotate(
                 text,
-                xy=(x_frac, mean), xycoords=("axes fraction", "data"),
-                xytext=(dx, 0.0 if centered else (-dy if below else dy)),
-                textcoords="offset points",
-                ha=ha, va="center" if centered else ("top" if below else "bottom"),
+                xy=(1.0, mean), xycoords=("axes fraction", "data"),
+                xytext=(0.0, 0.0), textcoords="offset points",
+                ha="right", va="bottom",
                 fontsize=float(mcfg.get("annotate_fontsize", 9.0)),
                 color=_pick(mcfg.get("annotate_color"), color),
                 zorder=zorder + 1, clip_on=False,
             )
-            _nudge_off_tick_labels(target, anno)    # 与刻度标签撞上时自动上下让开
-    return line
+    return line, anno
+
+
+def _place_mean_rain_annotation(target, anno, cfg: dict[str, Any], mean: float) -> None:
+    """按配置把平均降水线标注放到最终位置，并在与同侧刻度标签相撞时自动上下让开。
+
+    **必须在布局定型之后调用**（``_apply_layout`` 之后），与极值标注同理：横向的
+    ``ticks`` 落点要量取刻度标签所在列，纵向避让要量取刻度标签与文字盒，二者都随
+    坐标区的**最终**大小变化。而 ``tight_layout`` 会显著改变坐标区高度，自动刻度的
+    档位也随之改变（实测伦敦 + 横300：布局前 4 档 0/100/200/300，布局后 7 档
+    0/50/…/300）。若在布局前量旧几何，会得出"没有碰撞"的结论而不做避让，标注随后
+    就压在新出现的刻度标签（如 ``50``）上。
+    """
+    mcfg = cfg["figure"].get("mean_rain_line") or {}
+    # 落点：横向锚到绘图区左/中/右（轴宽比例），或 ``ticks`` 贴到该轴刻度标签那一列；
+    # 纵向锚到均值线：``above``/``below`` 把文字底/顶边离开线 dy 点，``center`` 则让
+    # 文字垂直中心正落在线上（此时 offset 的纵向分量不生效）。
+    position = str(mcfg.get("annotate_position", "right") or "right").lower()
+    if position not in ("left", "center", "right", "ticks"):
+        position = "right"
+    side = str(mcfg.get("annotate_side", "above") or "above").lower()
+    below, centered = side == "below", side == "center"
+    offset = mcfg.get("annotate_offset") or [0.0, 4.0]
+    try:
+        dx, dy = float(offset[0]), abs(float(offset[1]))
+    except (TypeError, ValueError, IndexError):
+        dx, dy = 0.0, 4.0
+    if position == "ticks":
+        x_frac, ha, dx_column = _tick_label_column(target)
+        dx += dx_column              # 横向落到刻度标签列；dx 仍可继续微调
+    else:
+        x_frac, ha = {"left": (0.0, "left"), "center": (0.5, "center"),
+                      "right": (1.0, "right")}[position]
+    anno.xy = (x_frac, mean)
+    anno.set_ha(ha)
+    anno.set_va("center" if centered else ("top" if below else "bottom"))
+    anno.set_position((dx, 0.0 if centered else (-dy if below else dy)))
+    _nudge_off_tick_labels(target, anno)    # 与刻度标签撞上时自动上下让开
 
 
 def _stack_axes(cfg: dict[str, Any], axis_map: dict[str, Any],
@@ -1189,7 +1210,7 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
     _draw_zeroline(ax, cfg)
 
     # ---- 平均降水线（默认关闭，需 figure.mean_rain_line.show = true）----
-    mean_line = _draw_mean_rain_line(axis_map, city, cfg)
+    mean_line, mean_anno = _draw_mean_rain_line(axis_map, city, cfg)
     if mean_line is not None and str(mean_line.get_label() or "").strip():
         handles.append(mean_line)
 
@@ -1198,6 +1219,10 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
     _add_legend(ax, handles, cfg)
     _add_credit(fig, cfg, context)
     _apply_layout(fig, cfg)
+    # 平均降水线标注与极值标注同理，放在布局定型之后：横纵落点/避让都要用坐标区的最终几何
+    if mean_anno is not None:
+        _place_mean_rain_annotation(mean_anno.axes, mean_anno, cfg,
+                                    float(mean_line.get_ydata()[0]))
     # 极值标注放在布局定型之后：避让判定要用坐标区的最终矩形
     _draw_extremes_annotations(ax, city, cfg, x, series_list, data_lines, mean_line)
     return _save(fig, out_paths, cfg)
