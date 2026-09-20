@@ -22,6 +22,16 @@ python wmo_climate.py --city 北京 --city 香港
 # 多城市对比（默认对比日均气温）
 python wmo_climate.py --compare 237 --compare 1 --compare 156 --profile compare
 
+# 多图：多个城市画在同一张画布（默认一行横排）
+python wmo_climate.py --cities 北京,香港,莫斯科
+
+# 多图：指定排列「列x行」，2x2 = 2 列 2 行；3x2 = 3 列 2 行
+python wmo_climate.py --cities 北京,香港,莫斯科,伦敦 --grid 2x2
+python wmo_climate.py --cities 北京,香港,莫斯科,伦敦,纽约,巴黎 --grid 3x2
+
+# 多图：3 个城市放进 2x2（4 格）→ 末格留空并给出提示，不报错
+python wmo_climate.py --cities 北京,香港,莫斯科 --grid 2x2
+
 # 临时改一个绘图参数（点路径覆盖）
 python wmo_climate.py --city-id 237 --set series.rainfall.color=#ff7f0e --set figure.title.show=false
 
@@ -71,6 +81,7 @@ from src.pipeline import (
     resolve_city_ids,
     run_batch,
     run_compare,
+    run_multi,
 )
 
 LEVELS = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40}
@@ -118,6 +129,13 @@ def build_parser() -> argparse.ArgumentParser:
                         help="多城市对比：可传 cityId 或城市名，重复传入多个")
     target.add_argument("--compare-metric", metavar="元素",
                         help="对比元素：minTemp/maxTemp/meanTemp/rainfall/raindays")
+    target.add_argument("--cities", action="append", default=[], metavar="ID或名称",
+                        help="多图：把多个城市画在**同一张画布**上，可传 cityId 或城市名，"
+                             "逗号分隔或重复传入（如 --cities 北京,香港,莫斯科）；"
+                             "与 --compare 互斥")
+    target.add_argument("--grid", metavar="列x行",
+                        help="多图排列方式，如 2x2（2 列 2 行）、3x2（3 列 2 行）；"
+                             "省略 = 一行横排。城市数少于格子时按行优先绘制并提示，不报错")
 
     conf = parser.add_argument_group("配置")
     conf.add_argument("--profile", metavar="名称", help="配置名称；未指定则使用默认配置")
@@ -202,6 +220,8 @@ def _parse_overrides(raw_items: list[str], args: argparse.Namespace) -> list[tup
         overrides.append(("data.rain_unit", args.rain_unit))
     if args.compare_metric:
         overrides.append(("compare.metric", args.compare_metric))
+    if args.grid:
+        overrides.append(("multi.grid", args.grid))
     if args.no_chart:
         overrides.append(("output.chart_formats", []))
     if args.no_table:
@@ -264,8 +284,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.show_config:
         print(dump_config(cfg))
-        if not (args.city_id or args.city or args.compare or args.search
-                or args.list_cities or args.init_profile):
+        if not (args.city_id or args.city or args.compare or args.cities
+                or args.search or args.list_cities or args.init_profile):
             return 0
 
     out_dir = Path(args.out_dir).resolve() if args.out_dir else None
@@ -299,6 +319,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         city_ids.append(int(text))
     compare_items: list[int] = []
+    multi_items: list[int] = []
     try:
         names = _split_targets(args.city)
         if names:
@@ -311,18 +332,29 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 resolved, _ = resolve_city_ids(cfg, [text], logger, out_dir)
                 compare_items.extend(resolved)
+        for text in _split_targets(args.cities):     # 与 --city 一样支持逗号批量
+            if text.isdigit():
+                multi_items.append(int(text))
+            else:
+                resolved, _ = resolve_city_ids(cfg, [text], logger, out_dir)
+                multi_items.extend(resolved)
     except (CityLookupError, FetchError) as exc:
         logger.error(str(exc))
         return 3
+
+    if multi_items and compare_items:
+        print("配置错误：--cities（多图）与 --compare（对比图）不能同时使用，请二选一。")
+        return 2
+    multi_items = _dedup_targets(multi_items)
 
     unique_ids = _dedup_targets(city_ids)
     if len(unique_ids) != len(city_ids):
         logger.info(f"已去重 {len(city_ids) - len(unique_ids)} 个重复城市")
     city_ids = unique_ids
 
-    if not city_ids and not compare_items:
+    if not city_ids and not compare_items and not multi_items:
         build_parser().print_help()
-        print("\n提示：至少提供 --city-id / --city / --compare 之一。")
+        print("\n提示：至少提供 --city-id / --city / --compare / --cities 之一。")
         return 0
 
     exit_code = 0
@@ -342,6 +374,24 @@ def main(argv: list[str] | None = None) -> int:
             for path in summary.compare_charts:
                 print(f"  {path}")
         if summary.fail_count and not summary.compare_charts:
+            exit_code = 1
+
+    # ---- 多图（多城市同画布） -------------------------------------------
+    if multi_items:
+        logger.info(f"开始多图，共 {len(multi_items)} 个城市，"
+                    f"排列：{cfg['multi'].get('grid')}，"
+                    f"配置：{cfg.get('profile_name')}（{cfg.get('profile_description') or '内置默认'}）")
+        try:
+            summary = run_multi(cfg, multi_items, logger, out_dir)
+        except FetchError as exc:
+            logger.error(str(exc))
+            return 3
+        print(summary.describe())
+        if summary.multi_charts:
+            print("多图：")
+            for path in summary.multi_charts:
+                print(f"  {path}")
+        if summary.fail_count and not summary.multi_charts:
             exit_code = 1
 
     # ---- 单城 / 批量 ----------------------------------------------------

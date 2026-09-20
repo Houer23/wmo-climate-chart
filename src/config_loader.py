@@ -169,7 +169,8 @@ DEFAULTS: dict[str, Any] = {
         "backoff_max": 15,
         "min_interval": 1.0,               # 两次网络请求的最小间隔（秒）；批量成图时每秒 ≤ 1 次
         "verify_ssl": True,
-        "proxy": "",
+        "proxy": "",                       # 代理地址（如 http://127.0.0.1:7890）；空 = 直连
+        "use_env_proxy": False,            # 无显式代理时是否沿用 HTTP_PROXY/HTTPS_PROXY 等环境变量
         "save_raw": False,
         "raw_dir": "cache/raw",
         "headers": {
@@ -197,6 +198,7 @@ DEFAULTS: dict[str, Any] = {
         "name_template": "{city}_{city_id}_climate_{profile}",       # 图片：带配置名后缀
         "table_name_template": "{city}_{city_id}_climate",           # 表格：不带配置名后缀
         "compare_name_template": "{city_count}城对比_{metric}_{profile}",
+        "multi_name_template": "{city_count}城多图_{grid}_{profile}",    # 多图：{cities} 亦可用
         "table_formats": ["csv", "md", "xlsx"],
         "chart_formats": ["png"],
         "chart_dpi": 144,
@@ -515,6 +517,16 @@ DEFAULTS: dict[str, Any] = {
             "offset": 4.0,
         },
     },
+
+    # ================= I. 多图（多城市同画布） =================
+    "multi": {
+        "grid": "auto",                     # auto = 1×N 全部横排；或 "列x行"（如 "2x2"、"3x2"）
+        "legend": "figure",                 # figure(整幅一个) | per_chart(每格各一个) | none
+        "share_ylim": "row",                # row(同一行共用一套纵轴量程) | none(各图独立)
+        "figsize": None,                    # null = 单个 figure.figsize × (列, 行)；也可给 [宽, 高]
+        "wspace": None,                     # 列间距（None = 交给 tight_layout 决定）
+        "hspace": None,                     # 行间距（None = 交给 tight_layout 决定）
+    },
 }
 
 
@@ -568,6 +580,51 @@ def coerce_value(raw: str) -> Any:
         return float(text)
     except ValueError:
         return raw
+
+
+#: 排列方式里允许的分隔符（全半角、大小写均可用）：2x2 / 2X2 / 2×2 / 2*2 / 2,2 / 2，2
+GRID_SEPARATORS = ("×", "✕", "*", ",", "，", "x")
+
+
+def parse_grid(text: Any) -> tuple[int, int]:
+    """把排列方式解析为 ``(列数, 行数)``；``auto`` / 空值返回 ``(0, 0)`` 表示"自动"。
+
+    约定**前一个数字是列数、后一个是行数**：``2x2`` = 2 列 2 行，``3x2`` = 3 列 2 行。
+    自动档由调用方按城市数决定（1×N 全横排）。非法值抛 :class:`ConfigError`。
+    """
+    if text in (None, "", "auto"):
+        return 0, 0
+    raw = str(text).strip().lower()
+    for sep in GRID_SEPARATORS:
+        raw = raw.replace(sep, "x")
+    parts = [p.strip() for p in raw.split("x") if p.strip()]
+    if len(parts) != 2:
+        raise ConfigError(_grid_hint(text))
+    try:
+        cols, rows = int(parts[0]), int(parts[1])
+    except ValueError as exc:
+        raise ConfigError(_grid_hint(text)) from exc
+    if cols < 1 or rows < 1:
+        raise ConfigError(f"排列方式的行列数必须为正整数（收到 {text!r}）")
+    return cols, rows
+
+
+def _grid_hint(text: Any) -> str:
+    return (f"排列方式非法：{text!r}；应为「列x行」，"
+            f"如 2x2（2 列 2 行）、3x2（3 列 2 行）")
+
+
+def resolve_grid(multi_cfg: Any, city_count: int) -> tuple[int, int]:
+    """把 ``multi.grid`` 解析成 ``(列数, 行数)``。
+
+    ``auto`` / 空值 → **1×N 全横排**（N = 城市数，至少 1 列）；否则按 ``parse_grid``
+    解析出的显式网格原样返回（城市数放不下时不在这里裁剪，由调用方决定怎么告警/取舍）。
+    """
+    grid = (multi_cfg or {}).get("grid", "auto") if isinstance(multi_cfg, dict) else "auto"
+    cols, rows = parse_grid(grid)
+    if cols <= 0 or rows <= 0:
+        return max(1, int(city_count)), 1
+    return cols, rows
 
 
 # ---- --mark 绘图微调 ---------------------------------------------------
@@ -1075,6 +1132,36 @@ def validate_config(cfg: dict[str, Any]) -> list[str]:
                           f"（当前：{coord.get('decimals')!r}）") from exc
     if decimals < 0:
         raise ConfigError(f"data.coord.decimals 不能为负数（当前：{decimals}）")
+
+    # 8) 多图（多城市同画布）
+    multi = cfg.get("multi")
+    if multi is not None and not isinstance(multi, dict):
+        raise ConfigError("multi 必须是对象")
+    multi = multi or {}
+    try:
+        parse_grid(multi.get("grid", "auto"))
+    except ConfigError as exc:
+        raise ConfigError(f"multi.grid：{exc}") from exc
+    multi_legend = str(multi.get("legend", "figure")).lower()
+    if multi_legend not in ("figure", "per_chart", "none"):
+        raise ConfigError("multi.legend 只能是 figure（整幅一个，默认）/ per_chart（每格各一个）"
+                          f" / none（不画）（当前：{multi.get('legend')}）")
+    share_ylim = str(multi.get("share_ylim", "row")).lower()
+    if share_ylim not in ("row", "none"):
+        raise ConfigError("multi.share_ylim 只能是 row（同一行共用一套纵轴量程，默认）"
+                          f"或 none（各图独立）（当前：{multi.get('share_ylim')}）")
+    multi_figsize = multi.get("figsize")
+    if multi_figsize is not None and (
+            not isinstance(multi_figsize, (list, tuple)) or len(multi_figsize) != 2):
+        raise ConfigError("multi.figsize 必须是 [宽, 高] 或 null"
+                          f"（null = 单个 figure.figsize × 行列）（当前：{multi_figsize!r}）")
+    for key in ("wspace", "hspace"):
+        if multi.get(key) is None:
+            continue
+        try:
+            float(multi[key])
+        except (TypeError, ValueError) as exc:
+            raise ConfigError(f"multi.{key} 必须是数字或 null（当前：{multi[key]!r}）") from exc
 
     return warnings
 

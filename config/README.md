@@ -110,8 +110,9 @@ profiles:
 | `backoff` | 秒 | `1.2` | 退避基数，第 n 次重试等待 `backoff × 2^(n-1)` |
 | `backoff_max` | 秒 | `15` | 单次退避上限 |
 | `min_interval` | 秒 | `1.0` | **相邻网络请求的最小间隔**（进程内排队，含重试）；默认每秒最多 1 次请求，批量成图时对数据源保持礼貌；设 `0` 关闭限速 |
-| `verify_ssl` | bool | `true` | 是否校验证书（不建议关闭） |
-| `proxy` | str | `""` | 代理地址，如 `http://127.0.0.1:7890` |
+| `verify_ssl` | bool | `true` | 是否校验证书（不建议关闭）；代理模式下同样生效 |
+| `proxy` | str | `""` | 代理地址，如 `http://127.0.0.1:7890`；**空 = 直连**，此时不会使用 `HTTP_PROXY` / `HTTPS_PROXY` 等环境变量里的代理 |
+| `use_env_proxy` | bool | `false` | 仅在 `proxy` 为空时生效：是否沿用 `HTTP_PROXY` / `HTTPS_PROXY` 等环境变量里的代理；默认 `false`，避免环境变量中的失效代理把请求全带去死地址 |
 | `save_raw` | bool | `false` | 是否把原始响应落到 `raw_dir` |
 | `raw_dir` | path | `"cache/raw"` | 原始响应目录 |
 | `headers` | obj | 见下 | **主请求头**，逐项可配 |
@@ -136,6 +137,7 @@ profiles:
 | `name_template` | str | `"{city}_{city_id}_climate_{profile}"` | **图片**文件名模板（不含扩展名）；`{profile}` 使图片**以配置名作后缀** |
 | `table_name_template` | str | `"{city}_{city_id}_climate"` | **表格**文件名模板；默认**不带**配置名后缀 |
 | `compare_name_template` | str | `"{city_count}城对比_{metric}_{profile}"` | 对比图文件名模板 |
+| `multi_name_template` | str | `"{city_count}城多图_{grid}_{profile}"` | 多图文件名模板；占位符 `{city_count}` `{cities}` `{grid}` `{profile}`（`{grid}` 让不同排列不会互相覆盖） |
 | `table_formats` | array | `["csv","md","xlsx"]` | 表格格式：`csv` / `md` / `xlsx` / `json`（空数组=不出表格） |
 | `chart_formats` | array | `["png"]` | 图片格式：`png` / `svg` / `pdf` / `jpg` / `webp`（空数组=不出图） |
 | `chart_dpi` | int | `144` | 位图 DPI（`svg`/`pdf` 为矢量不受影响） |
@@ -346,6 +348,30 @@ profiles:
 | `label_template` | str 模板 | `"{city}"` | 图例名模板 |
 | `legend_ncol` | int | `0` | 图例列数；`0` 自动 |
 | `data_labels.show` / `.fontsize` / `.format` / `.offset` | — | `false` / `8.0` / `"{:.1f}"` / `4.0` | 对比图数值标签 |
+
+## J. `multi` — 多图（多城市同画布）
+
+`--cities` 触发：一个城市画一格、共用一张画布。每格都是完整的单城统计图（横轴、标题、
+图例内容、极值标注等与单图口径一致），区别只在排版与纵轴装饰。
+
+| 键 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `grid` | str | `"auto"` | 排列方式。`auto` = `1×N` 全横排；或 `"列x行"`，如 `"2x2"`（2 列 2 行）、`"3x2"`（3 列 2 行）。分隔符 `x`/`×`/`*`/`,` 均可，大小写不敏感；**前一个数字是列数、后一个是行数**。填充顺序为**按行优先** |
+| `legend` | str | `"figure"` | `figure` 整幅只画一个图例（取第一格）/ `per_chart` 每格各一个 / `none` 不画 |
+| `share_ylim` | str | `"row"` | `row` **同一行**的各子图共用一套纵轴量程（主轴/副轴/第三轴各自按行统一），便于横向比较；`none` 各图独立 |
+| `figsize` | [宽,高] \| null | `null` | `null` = 单个 `figure.figsize` × (列, 行)（每格绘图区尺寸与单图一致）；给值则整幅画布用该尺寸 |
+| `wspace` / `hspace` | float \| null | `null` | 列 / 行间距；`null` 交给 `tight_layout` 决定 |
+
+**纵轴裁剪**：只保留**最左列**的左轴与**最右列**的右轴，其余子图对应侧的刻度、刻度标签与轴脊都不显示；
+左右按该轴自己的 `axes_*.side` 判定（因此 `axes_secondary.side: left` 这类配置也能正确落位）。横轴与标题不受影响。
+
+**城市数与格数不匹配**：城市数**少于**格数时空位不画并提示；**多于**格数时只画前 `列×行` 个并列出未绘制的城市。
+两种情况都**只告警、不报错**。取数失败的城市同样留空 + 告警，其余照画。
+
+```bash
+python wmo_climate.py --cities 北京,香港,莫斯科,伦敦 --grid 2x2
+python wmo_climate.py --cities 北京,香港 --set multi.legend=per_chart --set multi.share_ylim=none
+```
 
 ---
 

@@ -9,8 +9,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 from . import table_writer
-from .chart import ChartError, render_city_chart, render_comparison_chart
+from .chart import (
+    ChartError,
+    render_city_chart,
+    render_comparison_chart,
+    render_multi_city_chart,
+)
 from .city_index import CityEntry, CityIndex, load_city_index
+from .config_loader import resolve_grid
 from .http_client import (
     CityNotFoundError,
     FetchError,
@@ -45,7 +51,12 @@ class RunSummary:
     results: list[CityResult] = field(default_factory=list)
     compare_charts: list[Path] = field(default_factory=list)
     compare_series: list[str] = field(default_factory=list)  # 对比图实际绘出的要素
-    mode: str = "city"  # city | compare
+    multi_charts: list[Path] = field(default_factory=list)   # 多图产物
+    multi_series: list[str] = field(default_factory=list)    # 多图实际绘出的要素
+    grid: str = ""                                           # 多图画布，如 "2x2"
+    drawn_ids: list[int] = field(default_factory=list)       # 多图里真正画出来的 cityId
+    skipped_ids: list[int] = field(default_factory=list)     # 超出画布格数、未绘制的 cityId
+    mode: str = "city"  # city | compare | multi
 
     @property
     def ok_count(self) -> int:
@@ -56,14 +67,25 @@ class RunSummary:
         return sum(1 for r in self.results if not r.ok)
 
     def describe(self) -> str:
-        if self.mode == "compare":
+        if self.mode in ("compare", "multi"):
             head = f"取数成功 {self.ok_count} 个，失败 {self.fail_count} 个"
-            if self.compare_series:
-                head += f"，对比要素：{'、'.join(self.compare_series)}"
+            if self.mode == "compare":
+                if self.compare_series:
+                    head += f"，对比要素：{'、'.join(self.compare_series)}"
+            else:
+                if self.grid:
+                    head += f"，画布 {self.grid}"
+                if self.multi_series:
+                    head += f"，绘出要素：{'、'.join(self.multi_series)}"
+                if self.skipped_ids:
+                    head += f"，超出格数未绘制 {len(self.skipped_ids)} 个"
             lines = [head]
             for r in self.results:
                 state = "成功" if r.ok else "失败"
                 suffix = "" if r.ok else f"：{r.error}"
+                if self.mode == "multi" and r.ok:
+                    suffix = ("（已绘制）" if r.city_id in self.drawn_ids
+                              else "（超出画布格数，未绘制）")
                 lines.append(f"  [{state}] {r.city_name or 'cityId ' + str(r.city_id)}"
                              f"（{r.city_id}）{suffix}")
             return "\n".join(lines)
@@ -141,6 +163,16 @@ def compare_basename(cfg: dict[str, Any], cities: list[CityClimate]) -> str:
     names = "_".join(c.city_name for c in cities[:4]) or "compare"
     return _safe(template.format(
         city_count=len(cities), metric=metric, cities=names,
+        profile=cfg.get("profile_name", ""),
+    ))
+
+
+def multi_basename(cfg: dict[str, Any], cities: list[CityClimate], grid: str) -> str:
+    """多图文件名主干。占位符：``{city_count}`` / ``{cities}`` / ``{grid}`` / ``{profile}``。"""
+    template = cfg["output"].get("multi_name_template", "{city_count}城多图_{grid}_{profile}")
+    names = "_".join(city.city_name for city in cities[:4]) or "multi"
+    return _safe(template.format(
+        city_count=len(cities), cities=names, grid=grid,
         profile=cfg.get("profile_name", ""),
     ))
 
@@ -331,6 +363,83 @@ def run_compare(cfg: dict[str, Any], city_ids: list[int], logger=None,
         except ChartError as exc:
             if logger:
                 logger.error(f"对比图生成失败：{exc}")
+    return summary
+
+
+# ---- 多图（多城市同画布） ----------------------------------------------
+
+def run_multi(cfg: dict[str, Any], city_ids: list[int], logger=None,
+              out_dir: Optional[Path] = None) -> RunSummary:
+    """多图：把多个城市画进**同一张画布**。
+
+    排列取 ``multi.grid``（``auto`` = 1×N 全横排；``2x2`` = 2 列 2 行），按行优先填充。
+    城市数少于格子时，空位不画并给出提示；多于格子时，只画前 ``列×行`` 个并提示哪些被
+    略过——两种情况都**只告警、不报错**。某个城市取数失败时同样告警并留空。
+    """
+    client = make_client(cfg, logger, out_dir)
+    summary = RunSummary(mode="multi")
+    cities: list[CityClimate] = []
+    for city_id in city_ids:
+        result = CityResult(city_id=city_id, profile=str(cfg.get("profile_name", "")))
+        try:
+            city = fetch_city(client, cfg, city_id, logger)
+        except (CityNotFoundError, NoClimateDataError, ParseError, FetchError) as exc:
+            result.error = str(exc)
+            if logger:
+                logger.error(f"多图：cityId {city_id} 取数失败：{exc}")
+            summary.results.append(result)
+            continue
+        result.city = city
+        result.city_name = city.city_name
+        result.ok = True
+        cities.append(city)
+        summary.results.append(result)
+
+    if not cities:
+        if logger:
+            logger.error("没有可用于多图的城市")
+        return summary
+
+    cols, rows = resolve_grid(cfg.get("multi") or {}, len(cities))
+    capacity = cols * rows
+    drawn = cities[:capacity]
+    summary.grid = f"{cols}x{rows}"
+    summary.drawn_ids = [city.city_id for city in drawn]
+    summary.skipped_ids = [city.city_id for city in cities[capacity:]]
+    if logger:
+        if len(cities) < capacity:
+            logger.warning(
+                f"城市数量 {len(cities)} 与画布 {cols}x{rows}（{capacity} 格）不匹配："
+                f"按行优先只画前 {len(cities)} 格，剩余 {capacity - len(cities)} 格留空")
+        elif summary.skipped_ids:
+            names = "、".join(city.city_name for city in cities[capacity:])
+            logger.warning(
+                f"城市数量 {len(cities)} 超过画布 {cols}x{rows}（{capacity} 格）："
+                f"只画前 {capacity} 个，以下 {len(summary.skipped_ids)} 个未绘制：{names}")
+
+    dirs = paths_for(cfg, out_dir)
+    dirs["out_dir"].mkdir(parents=True, exist_ok=True)
+    basename = multi_basename(cfg, drawn, summary.grid)
+    policy = str(cfg["output"].get("overwrite", "overwrite"))
+    charts = [dirs["out_dir"] / f"{basename}.{fmt}"
+              for fmt in (cfg["output"].get("chart_formats") or [])]
+    writable = _apply_overwrite(charts, policy)
+    if writable:
+        try:
+            report: dict[str, Any] = {}
+            summary.multi_charts = render_multi_city_chart(
+                drawn, cfg, writable, logger, report, grid=(cols, rows))
+            summary.multi_series = [str(item.get("label", ""))
+                                    for item in report.get("series") or []]
+            if logger:
+                series_note = (f"（要素：{'、'.join(summary.multi_series)}）"
+                               if summary.multi_series else "")
+                logger.info(f"多图已生成：{len(summary.multi_charts)} 张{series_note}")
+        except ChartError as exc:
+            if logger:
+                logger.error(f"多图生成失败：{exc}")
+    if logger:
+        logger.info(f"请求统计：共 {client.request_count} 次请求，其中重试 {client.retry_count} 次")
     return summary
 
 

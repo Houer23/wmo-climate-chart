@@ -43,6 +43,10 @@ python wmo_climate.py --city-id 237 --m hh,r12,t14,p14,tt18
 # 多城市对比
 python wmo_climate.py --compare 北京 --compare 1 --compare 156 --profile compare
 
+# 多图：多个城市画在同一张画布（默认一行横排；2x2 = 2 列 2 行）
+python wmo_climate.py --cities 北京,香港,莫斯科
+python wmo_climate.py --cities 北京,香港,莫斯科,伦敦 --grid 2x2
+
 # 查城市编号
 python wmo_climate.py --search 北京
 python wmo_climate.py --list-cities --country 中国
@@ -58,6 +62,8 @@ python wmo_climate.py --list-cities --country 中国
 | `--city 名称` | 城市名称，自动反查 cityId；同样支持逗号批量（`北京,香港`），自动去重 |
 | `--compare ID或名称` | 多城市对比，可重复；同时传多个 cityId 或城市名 |
 | `--compare-metric 元素` | 对比元素：`minTemp`/`maxTemp`/`meanTemp`/`rainfall`/`raindays` |
+| `--cities ID或名称` | **多图**：多个城市画在**同一张画布**；支持逗号批量（`北京,香港`）与重复传参，自动去重；与 `--compare` **互斥** |
+| `--grid 列x行` | 多图排列，如 `2x2`（2 列 2 行）、`3x2`（3 列 2 行），分隔符 `x`/`×`/`*`/`,` 均可，**前=列数、后=行数**；省略 = `1×N` 全横排 |
 | `--profile 名称` | 选用配置；**未指定则用默认配置** |
 | `--profiles-file 路径` | 使用外部 profiles 文件（YAML，兼容 JSON），不污染项目内置配置 |
 | `--set 键=值` | 点路径覆盖配置，如 `series.rainfall.color=#ff0000`，可重复 |
@@ -127,11 +133,11 @@ DrawClimateChart/
 │   ├── city_index.py         # 城市名 → cityId 反查（3629 城）
 │   ├── config_loader.py      # 配置：默认值 / 深合并 / 继承 / 样式 / 校验
 │   ├── table_writer.py       # 表格：CSV / Markdown / XLSX / JSON
-│   ├── chart.py              # 绘图：matplotlib 双轴（+第三轴），全参数可配
-│   └── pipeline.py           # 编排：单城 / 批量 / 对比
+│   ├── chart.py              # 绘图：单图 / 多图 / 对比图，matplotlib 双轴（+第三轴），全参数可配
+│   └── pipeline.py           # 编排：单城 / 批量 / 对比 / 多图
 ├── scripts/                  # 可复用工具（夹具抓取 / CLI 验收 / 缺失值扫描）
 ├── tests/
-│   ├── test_regression.py    # 回归测试（离线可跑，316 项断言）
+│   ├── test_regression.py    # 回归测试（离线可跑，382 项断言）
 │   ├── fixtures/             # 真实响应样本（含城市索引与 samples/ 抽样数据）
 │   └── _output/              # 测试产物：渲染核对图 / 表格中间输出（不入库）
 ├── output/                   # 交付物：表格与图（生成物，不入库）
@@ -217,7 +223,8 @@ profiles:
 默认文件名模板：**图片**用 `{city}_{city_id}_climate_{profile}`（**以配置名作后缀**，如 `北京_237_climate_简图.png`），
 **表格**用 `{city}_{city_id}_climate`（不带后缀，如 `北京_237_climate.xlsx`）。
 分别由 `output.name_template` / `output.table_name_template` 调整
-（占位符：`{city}` `{city_id}` `{member}` `{station}` `{profile}` `{lat}` `{lon}`；对比图另有 `{city_count}` `{metric}`）。
+（占位符：`{city}` `{city_id}` `{member}` `{station}` `{profile}` `{lat}` `{lon}`；对比图另有 `{city_count}` `{metric}`，
+多图另有 `{city_count}` `{cities}` `{grid}`，默认模板 `{city_count}城多图_{grid}_{profile}`）。
 经纬度文案由 `data.coord` 决定（方向符号 `E/W/N/S` 或 `东/西/南/北`、是否带单位、单位用 `°` 还是 `度`、小数位；
 也可切换为"纯数字、西经/南纬为负"），默认输出如 `39.93°N` `116.28°E`。
 
@@ -239,7 +246,8 @@ python tests/test_regression.py --network  # 追加联网用例
 
 覆盖：数值容错、平均气温派生、raintype 三种变体、缺失值、无气候数据城市、
 配置深合并与继承（多文件 YAML + 旧 JSON 兼容）、非法配置报错、四种表格格式与转置/年列/单位变体、
-**全部配置逐一渲染**、三轴渲染、多城市对比、城市名反查。
+**全部配置逐一渲染**、三轴渲染、多城市对比、**多图**（排列解析 / 纵轴裁剪 / 同行量程统一 / 空位与超格告警）、
+城市名反查。
 
 ---
 
@@ -249,3 +257,4 @@ python tests/test_regression.py --network  # 追加联网用例
 - 城市页面不含数据，因此「页面解析」实为**存在性校验 + 数据接口定位**，数值一律取自数据文件。
 - 第三轴（降水日数）仅有右轴刻度，不参与主轴对齐，适合并置观感展示。
 - `--compare` 只支持单一元素对比；不同城市统计时段可能不同，对比图中会在副标题列出各自时段。
+- 多图（`--cities`）**只出合并图、不出表格**；量程按**行**统一，因此跨行不可直接比高低（同一行内可比）。

@@ -71,6 +71,26 @@ def throttle(min_interval: float, logger=None, clock=None, sleep=None) -> float:
     return wait
 
 
+class _NoProxyHandler(urllib.request.ProxyHandler):
+    """显式「直连」处理器：关掉代理，且保证真的被注册进 opener。
+
+    不要直接用 ``ProxyHandler({})``：空映射不会生成任何 ``<scheme>_open`` 方法，
+    ``OpenerDirector.add_handler`` 发现无可挂载方法就**不注册它**（只剩 ``build_opener``
+    顺带跳过默认代理的副作用），既依赖实现细节、也无法从 ``opener.handlers`` 观察到。
+    这里给各协议显式挂一个返回 ``None`` 的 ``*_open``——返回 ``None`` 表示"本处理器不
+    处理"，请求继续交给链上后续的 ``HTTPHandler`` / ``HTTPSHandler``，即直连。
+    """
+
+    def __init__(self, schemes: tuple[str, ...] = ("http", "https", "ftp")) -> None:
+        super().__init__({})
+        for scheme in schemes:
+            setattr(self, f"{scheme}_open", self._decline)
+
+    @staticmethod
+    def _decline(_req: Any, *_args: Any) -> None:
+        return None
+
+
 class FetchError(RuntimeError):
     """网络层失败（已在内部重试过）。"""
 
@@ -124,6 +144,10 @@ class HttpClient:
         self.min_interval = float(self.cfg.get("min_interval", 1.0) or 0.0)
         self.verify_ssl = bool(self.cfg.get("verify_ssl", True))
         self.proxy = (self.cfg.get("proxy") or "").strip()
+        # 无显式代理时是否允许环境变量（HTTP_PROXY / HTTPS_PROXY / …）暗中接管。
+        # 默认 false：代理只认 fetch.proxy，避免"配置写着空、实际走了 env 里的死代理"。
+        self.use_env_proxy = bool(self.cfg.get("use_env_proxy", False))
+        self.opener = self._build_opener()
 
         cache_cfg = self.cfg.get("cache") or {}
         self.cache_enabled = bool(cache_cfg.get("enabled", True))
@@ -256,18 +280,35 @@ class HttpClient:
             f"请求失败，已重试 {self.retries} 次：{url}（原因：{type(last_error).__name__}: {last_error}）"
         )
 
-    def _request_once(self, url: str, headers: dict[str, str]) -> FetchResult:
-        req = urllib.request.Request(url, headers=headers, method="GET")
+    def _build_opener(self) -> urllib.request.OpenerDirector:
+        """按配置构造 opener：代理与证书校验都只认**配置**，不让环境变量暗中接管。
+
+        * ``fetch.proxy`` 非空 → 只走该代理；
+        * ``fetch.proxy`` 为空 → **显式禁用**代理。挂上 ``_NoProxyHandler`` 会顶掉 urllib
+          默认从 ``HTTP_PROXY`` / ``HTTPS_PROXY`` 等环境变量派生的那个 ProxyHandler；否则
+          env 里的代理指向失效端口时，配置写 ``""`` 也会把请求全送去死地址（实测踩过）；
+        * 仅 ``fetch.use_env_proxy=true`` 时才交回 urllib 默认行为（沿用 env 代理）。
+
+        ``verify_ssl=false`` 用 ``HTTPSHandler(context=…)`` 生效，**代理模式下同样有效**
+        —— 旧实现只给 opener 装了 ProxyHandler，会把该开关静默丢掉。
+        """
         context: Optional[ssl.SSLContext] = None
         if not self.verify_ssl:
             context = ssl._create_unverified_context()  # noqa: S323 - 由配置显式开启
-        if self.proxy:
-            opener = urllib.request.build_opener(
-                urllib.request.ProxyHandler({"http": self.proxy, "https": self.proxy})
-            )
-            response = opener.open(req, timeout=self.timeout)
-        else:
-            response = urllib.request.urlopen(req, timeout=self.timeout, context=context)
+        if not self.proxy and self.use_env_proxy:
+            return urllib.request.build_opener(
+                urllib.request.HTTPSHandler(context=context))
+        handlers: list[Any] = [
+            urllib.request.ProxyHandler({"http": self.proxy, "https": self.proxy})
+            if self.proxy else _NoProxyHandler()
+        ]
+        if context is not None:
+            handlers.append(urllib.request.HTTPSHandler(context=context))
+        return urllib.request.build_opener(*handlers)
+
+    def _request_once(self, url: str, headers: dict[str, str]) -> FetchResult:
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        response = self.opener.open(req, timeout=self.timeout)
         with response:
             content = response.read()
             resp_headers = {k: v for k, v in response.headers.items()}

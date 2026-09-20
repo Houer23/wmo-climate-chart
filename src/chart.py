@@ -19,6 +19,7 @@ from matplotlib.text import Text  # noqa: E402
 from matplotlib.ticker import FuncFormatter, MaxNLocator  # noqa: E402
 from matplotlib.transforms import Bbox  # noqa: E402
 
+from .config_loader import resolve_grid  # noqa: E402
 from .models import CityClimate, format_coord, normalize_series_key  # noqa: E402
 
 TEMP_KEYS = ("minTemp", "maxTemp", "meanTemp")
@@ -219,7 +220,13 @@ def _y_label_position(ax, ax_cfg: dict[str, Any], default_x: float) -> None:
 
 def _configure_y_axis(ax, ax_cfg: dict[str, Any], values: Sequence[np.ndarray],
                       default_x: float, has_bar: bool, cfg: dict[str, Any],
-                      logger=None, only_side: bool = False) -> None:
+                      logger=None, only_side: bool = False, show_y: bool = True) -> None:
+    """配置一条纵轴的量程、刻度与轴脊。
+
+    ``show_y=False`` 时该轴"只占位不出声"：不写轴标题，刻度、刻度标签与**该侧轴脊**
+    都不显示（其余轴脊不受影响，底部横轴脊照旧）——多图里非最左/最右列的子图用它来
+    去掉重复的纵轴装饰。
+    """
     side = str(ax_cfg.get("side", "left")).lower()
     ax.yaxis.set_ticks_position(side)
     if side == "right":
@@ -228,7 +235,7 @@ def _configure_y_axis(ax, ax_cfg: dict[str, Any], values: Sequence[np.ndarray],
         ax.yaxis.set_label_position("left")
 
     label = str(ax_cfg.get("label_text", "") or "")
-    if label:
+    if label and show_y:
         label_kwargs: dict[str, Any] = {
             "fontsize": float(ax_cfg.get("label_fontsize", 12)),
             "color": str(ax_cfg.get("label_color", "#2c3e50")),
@@ -330,6 +337,10 @@ def _configure_y_axis(ax, ax_cfg: dict[str, Any], values: Sequence[np.ndarray],
         width=float(ax_cfg.get("tick_width", 0.8)),
         direction=str(ax_cfg.get("tick_direction", "out")),
     )
+    if not show_y:
+        # 只关"这一侧"的刻度与刻度标签；量程/刻度位置照常生效，便于与同行子图对齐
+        ax.tick_params(axis="y", which="major", left=False, right=False,
+                       labelleft=False, labelright=False)
 
     # 轴脊
     spinner = ax.spines
@@ -339,7 +350,7 @@ def _configure_y_axis(ax, ax_cfg: dict[str, Any], values: Sequence[np.ndarray],
         spinner[name].set_color(str(ax_cfg.get("spine_color", "#c9d3dd")))
         spinner[name].set_linewidth(float(ax_cfg.get("spine_linewidth", 1.0)))
     if show_spine:
-        spinner[side].set_visible(True)
+        spinner[side].set_visible(show_y)
         if only_side:
             for name in ("left", "bottom", "top"):
                 spinner[name].set_visible(False)
@@ -1131,26 +1142,30 @@ def _draw_extremes_annotations(ax, city: CityClimate, cfg: dict[str, Any], x: np
             placed_boxes.append(box)            # 后一个标注要避开前一个
 
 
-def render_city_chart(city: CityClimate, cfg: dict[str, Any],
-                      out_paths: list[Path], logger=None,
-                      report: Optional[dict[str, Any]] = None) -> list[Path]:
-    if not city.has_climate:
-        raise ChartError(f"{city.city_name}（cityId {city.city_id}）没有气候数据，无法绘图")
+def _draw_city_panel(ax, city: CityClimate, series_list: list[Any],
+                     cfg: dict[str, Any], logger=None,
+                     report: Optional[dict[str, Any]] = None,
+                     *, is_leftmost: bool = True, is_rightmost: bool = True,
+                     with_legend: bool = True,
+                     share: Optional[dict[str, Any]] = None
+                     ) -> tuple[list[Any], list[Any]]:
+    """把一个城市画进**既有的坐标轴**，返回 ``(图例句柄, 布局定型后的延迟回调)``。
 
-    setup_style(cfg)
-    fig_cfg = cfg["figure"]
-    figsize = fig_cfg.get("figsize") or [12.0, 6.0]
+    单图（``render_city_chart``）与多图（``render_multi_city_chart``）共用本函数，
+    差异只在传入的 ``ax`` 与几个开关：
 
-    fig = plt.figure(
-        figsize=(float(figsize[0]), float(figsize[1])),
-        dpi=float(fig_cfg.get("dpi", 144)),
-        facecolor=str(fig_cfg.get("facecolor", "#ffffff")),
-        edgecolor=str(fig_cfg.get("edgecolor", "none")),
-    )
-    ax = fig.add_subplot(111)
+    * ``is_leftmost`` / ``is_rightmost``：多图里只有**最左列**保留左轴、**最右列**保留右轴，
+      其余子图对应侧的刻度、刻度标签与轴脊都不画（横轴与标题不受影响）。左右判定看该轴
+      自己的 ``side`` 配置，因此 ``axes_secondary.side=left`` 这类配置也能正确落位。
+    * ``with_legend``：整幅只画一个图例时，由外层统一画。
+    * ``share``：多图里**同一行共用的量程**，形如
+      ``{"primary": {"values": [...], "has_bar": bool}}``。
+
+    平均降水线标注与极值标注要用**布局定型后**的坐标区几何，所以不在这里定位，而是以
+    延迟回调返回，由外层在 ``_apply_layout`` 之后统一执行。
+    """
     ax.set_facecolor(_resolve_axes_facecolor(cfg))
-
-    series_list = collect_series(city, cfg, logger)
+    fig_cfg = cfg["figure"]
     by_axis: dict[str, list[tuple[str, dict[str, Any], np.ndarray]]] = {a: [] for a in AXIS_KEYS}
     for key, scfg, arr in series_list:
         by_axis[str(scfg.get("axis", "primary"))].append((key, scfg, arr))
@@ -1205,7 +1220,6 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
                   for ln in a.lines if id(ln) not in lines_before]
     handles = [handles_by_key[k] for k, _scfg, _arr in series_list if k in handles_by_key]
     if not handles:
-        plt.close(fig)
         raise ChartError(f"{city.city_name} 没有任何可绘制的元素，请检查配置中 series 的 enabled")
 
     # 回填实际绘出的要素（供上层日志/汇总展示）
@@ -1222,22 +1236,34 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
 
     # ---- 轴样式 ----
     axis_specs = [
-        (ax, "axes_primary", by_axis["primary"], -0.075, False),
-        (ax2, "axes_secondary", by_axis["secondary"], 1.075, True),
-        (ax3, "axes_tertiary", by_axis["tertiary"], 1.155, True),
+        (ax, "axes_primary", "primary", by_axis["primary"], -0.075, False),
+        (ax2, "axes_secondary", "secondary", by_axis["secondary"], 1.075, True),
+        (ax3, "axes_tertiary", "tertiary", by_axis["tertiary"], 1.155, True),
     ]
-    for target, key_name, items, default_x, only_side in axis_specs:
+    for target, key_name, axis_key, items, default_x, only_side in axis_specs:
         if target is None:
             continue
+        ax_cfg = cfg[key_name]
+        # 同一行共用量程时用行内并集；否则用本图自己的数据
+        shared = (share or {}).get(axis_key) or {}
+        own_values = [v for _, _, v in items]
+        values = shared.get("values") or own_values or [np.array([0.0])]
+        shared_bar = shared.get("has_bar")
+        has_bar = (bool(shared_bar) if shared_bar is not None
+                   else any(s.get("chart_type") == "bar" for _, s, _ in items))
+        # 左轴只在最左列保留、右轴只在最右列保留（按该轴自己的 side 判定）
+        show_y = (is_leftmost if str(ax_cfg.get("side", "left")).lower() == "left"
+                  else is_rightmost)
         _configure_y_axis(
             target,
-            cfg[key_name],
-            [v for _, _, v in items] or [np.array([0.0])],
+            ax_cfg,
+            values,
             default_x=default_x,
-            has_bar=any(s.get("chart_type") == "bar" for _, s, _ in items),
+            has_bar=has_bar,
             cfg=cfg,
             logger=logger,
             only_side=only_side,
+            show_y=show_y,
         )
         if only_side:
             target.tick_params(axis="x", length=0, labelsize=0)
@@ -1260,15 +1286,166 @@ def render_city_chart(city: CityClimate, cfg: dict[str, Any],
 
     context = _context(city, cfg)
     _add_titles(ax, city, cfg, context)
-    _add_legend(ax, handles, cfg)
-    _add_credit(fig, cfg, context)
-    _apply_layout(fig, cfg)
-    # 平均降水线标注与极值标注同理，放在布局定型之后：横纵落点/避让都要用坐标区的最终几何
+    if with_legend:
+        _add_legend(ax, handles, cfg)
+
+    # 平均降水线标注与极值标注都要用**布局定型后**的坐标区几何（横纵落点、避让判定），
+    # 因此这里只登记，由外层在 _apply_layout 之后执行。
+    deferred: list[Any] = []
     if mean_anno is not None:
-        _place_mean_rain_annotation(mean_anno.axes, mean_anno, cfg,
-                                    float(mean_line.get_ydata()[0]))
-    # 极值标注放在布局定型之后：避让判定要用坐标区的最终矩形
-    _draw_extremes_annotations(ax, city, cfg, x, series_list, data_lines, mean_line)
+        mean_value = float(mean_line.get_ydata()[0])
+        deferred.append(
+            lambda: _place_mean_rain_annotation(mean_anno.axes, mean_anno, cfg, mean_value))
+    deferred.append(
+        lambda: _draw_extremes_annotations(ax, city, cfg, x, series_list, data_lines, mean_line))
+    return handles, deferred
+
+
+def _multi_context(cities: list[CityClimate], cfg: dict[str, Any]) -> dict[str, str]:
+    """多图的文本上下文：城市相关占位符用「全部城市名」合成，供署名等模板使用。"""
+    context = _context(cities[0], cfg)
+    context["city"] = "、".join(city.city_name for city in cities)
+    context["city_id"] = ""
+    context["city_count"] = str(len(cities))
+    return context
+
+
+def render_city_chart(city: CityClimate, cfg: dict[str, Any],
+                      out_paths: list[Path], logger=None,
+                      report: Optional[dict[str, Any]] = None) -> list[Path]:
+    if not city.has_climate:
+        raise ChartError(f"{city.city_name}（cityId {city.city_id}）没有气候数据，无法绘图")
+
+    setup_style(cfg)
+    fig_cfg = cfg["figure"]
+    figsize = fig_cfg.get("figsize") or [12.0, 6.0]
+
+    fig = plt.figure(
+        figsize=(float(figsize[0]), float(figsize[1])),
+        dpi=float(fig_cfg.get("dpi", 144)),
+        facecolor=str(fig_cfg.get("facecolor", "#ffffff")),
+        edgecolor=str(fig_cfg.get("edgecolor", "none")),
+    )
+    ax = fig.add_subplot(111)
+
+    series_list = collect_series(city, cfg, logger)
+    try:
+        _handles, deferred = _draw_city_panel(ax, city, series_list, cfg, logger, report)
+    except ChartError:
+        plt.close(fig)
+        raise
+    _add_credit(fig, cfg, _context(city, cfg))
+    _apply_layout(fig, cfg)
+    for callback in deferred:               # 标注定位：必须在布局定型之后
+        callback()
+    return _save(fig, out_paths, cfg)
+
+
+# ---- 主入口：多图（多城市同画布） --------------------------------------
+
+def render_multi_city_chart(cities: list[CityClimate], cfg: dict[str, Any],
+                            out_paths: list[Path], logger=None,
+                            report: Optional[dict[str, Any]] = None,
+                            grid: Optional[tuple[int, int]] = None) -> list[Path]:
+    """多图：把多个城市画在**同一张画布**上。
+
+    排列由 ``multi.grid``（或直接传入 ``grid``）决定：``auto`` = 1×N 全横排，``2x2`` =
+    2 列 2 行（前=列数、后=行数），按行优先填充，格子多于城市时空位不画。只保留**最左列**
+    的左轴与**最右列**的右轴，各子图的横轴与标题保持原样；``multi.share_ylim=row``（默认）
+    时同一行的各子图共用一套纵轴量程，便于横向比较（置 ``none`` 则各图独立）。
+    画布尺寸默认 = 单个 ``figure.figsize`` × (列, 行)，可用 ``multi.figsize`` 覆盖。
+    """
+    usable = [city for city in cities if city.has_climate]
+    if not usable:
+        raise ChartError("参与多图的城市都没有气候数据，无法绘图")
+
+    mcfg = cfg.get("multi") or {}
+    if grid is None:
+        cols, rows = resolve_grid(mcfg, len(usable))
+    else:
+        cols, rows = int(grid[0]), int(grid[1])
+    cols, rows = max(1, cols), max(1, rows)
+    capacity = cols * rows
+    panels = list(usable[:capacity])
+
+    setup_style(cfg)
+    fig_cfg = cfg["figure"]
+    base = fig_cfg.get("figsize") or [12.0, 6.0]
+    mfigsize = mcfg.get("figsize")
+    if mfigsize:
+        figsize = (float(mfigsize[0]), float(mfigsize[1]))
+    else:
+        figsize = (float(base[0]) * cols, float(base[1]) * rows)
+    fig = plt.figure(
+        figsize=figsize,
+        dpi=float(fig_cfg.get("dpi", 144)),
+        facecolor=str(fig_cfg.get("facecolor", "#ffffff")),
+        edgecolor=str(fig_cfg.get("edgecolor", "none")),
+    )
+
+    # 先收集各城市要画的元素：同行量程统一需要"先知道这一行有哪些数值"
+    collected = [(city, collect_series(city, cfg, logger)) for city in panels]
+    shares: list[dict[str, Any]] = []
+    share_ylim = str(mcfg.get("share_ylim", "row")).lower() != "none"
+    for row in range(rows):
+        row_share: dict[str, Any] = {}
+        if share_ylim:
+            for index in range(row * cols, min((row + 1) * cols, len(collected))):
+                for _key, scfg, arr in collected[index][1]:
+                    slot = row_share.setdefault(
+                        str(scfg.get("axis", "primary")), {"values": [], "has_bar": False})
+                    slot["values"].append(arr)
+                    slot["has_bar"] = (slot["has_bar"]
+                                       or scfg.get("chart_type") == "bar")
+        shares.append(row_share)
+
+    legend_mode = str(mcfg.get("legend", "figure")).lower()
+    cells = fig.subplots(rows, cols, squeeze=False)
+    deferred: list[Any] = []
+    first_ax = None
+    first_handles: list[Any] = []
+    drawn = 0
+    for index, (city, series_list) in enumerate(collected):
+        row, col = divmod(index, cols)
+        ax = cells[row][col]
+        try:
+            handles, panel_deferred = _draw_city_panel(
+                ax, city, series_list, cfg, logger,
+                report if index == 0 else None,
+                is_leftmost=(col == 0), is_rightmost=(col == cols - 1),
+                with_legend=(legend_mode == "per_chart"),
+                share=shares[row],
+            )
+        except ChartError as exc:           # 单个城市画不出内容不拖垮整幅图
+            ax.set_visible(False)
+            if logger:
+                logger.warning(f"{city.city_name}（{city.city_id}）多图跳过：{exc}")
+            continue
+        drawn += 1
+        if first_ax is None:
+            first_ax, first_handles = ax, handles
+        deferred.extend(panel_deferred)
+
+    for index in range(len(collected), capacity):    # 城市数不足：空位不画
+        row, col = divmod(index, cols)
+        cells[row][col].set_visible(False)
+
+    if legend_mode == "figure" and first_ax is not None:
+        _add_legend(first_ax, first_handles, cfg)    # 整幅只画一个图例（取第一格）
+    _add_credit(fig, cfg, _multi_context(panels, cfg))
+    _apply_layout(fig, cfg)
+    gap = {key: float(mcfg[key]) for key in ("wspace", "hspace")
+           if mcfg.get(key) is not None}
+    if gap:
+        fig.subplots_adjust(**gap)
+    for callback in deferred:               # 标注定位：必须在布局定型之后
+        callback()
+
+    if report is not None:
+        report["city_count"] = len(panels)
+        report["drawn"] = drawn
+        report["grid"] = f"{cols}x{rows}"
+        report["cities"] = [city.city_name for city in panels]
     return _save(fig, out_paths, cfg)
 
 

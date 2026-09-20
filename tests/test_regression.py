@@ -26,7 +26,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src import table_writer  # noqa: E402
-from src.chart import render_city_chart, render_comparison_chart  # noqa: E402
+from src.chart import (  # noqa: E402
+    render_city_chart,
+    render_comparison_chart,
+    render_multi_city_chart,
+)
 from src.city_index import CityIndex, CityEntry, _flatten  # noqa: E402
 from src.config_loader import (  # noqa: E402
     ConfigError,
@@ -1086,6 +1090,275 @@ def test_compare_render() -> None:
     check("对比柱状图渲染成功", path3.exists() and path3.stat().st_size > 5000)
 
 
+# ======================= 4b. 多图（多城市同画布） =======================
+
+def test_parse_grid() -> None:
+    """排列方式解析：前=列数、后=行数；多种分隔符等价；非法值报错。"""
+    from src.config_loader import ConfigError as CfgErr
+    from src.config_loader import parse_grid, resolve_grid
+
+    check("parse_grid('2x2') == (2, 2)", parse_grid("2x2") == (2, 2), str(parse_grid("2x2")))
+    check("parse_grid('3x2') == (3, 2)（前=列、后=行）",
+          parse_grid("3x2") == (3, 2), str(parse_grid("3x2")))
+    for text in ("2X2", "2×2", "2*2", "2,2", "2，2", " 2 x 2 "):
+        check(f"parse_grid({text!r}) 与 2x2 等价",
+              parse_grid(text) == (2, 2), str(parse_grid(text)))
+    check("auto / 空值 → (0, 0) 表示自动",
+          parse_grid("auto") == (0, 0) and parse_grid(None) == (0, 0) and parse_grid("") == (0, 0))
+    check("resolve_grid(auto, 3) → 1 行 3 列（全横排）",
+          resolve_grid({"grid": "auto"}, 3) == (3, 1), str(resolve_grid({"grid": "auto"}, 3)))
+    check("resolve_grid 显式网格原样返回", resolve_grid({"grid": "2x3"}, 6) == (2, 3))
+    for bad in ("abc", "2", "2x", "x2", "0x2", "2x0", "2x2x2", "-1x2"):
+        try:
+            parse_grid(bad)
+        except CfgErr:
+            check(f"parse_grid({bad!r}) 报错", True)
+        else:
+            check(f"parse_grid({bad!r}) 报错", False, "未抛异常")
+
+    bad_cfg = load_config(None)
+    bad_cfg["multi"]["grid"] = "2x"
+    try:
+        validate_config(bad_cfg)
+    except CfgErr as exc:
+        check("非法 multi.grid 被校验拦下", "multi.grid" in str(exc), str(exc))
+    else:
+        check("非法 multi.grid 被校验拦下", False, "未抛出")
+    bad_cfg = load_config(None)
+    bad_cfg["multi"]["legend"] = "many"
+    try:
+        validate_config(bad_cfg)
+    except CfgErr as exc:
+        check("非法 multi.legend 被校验拦下", "multi.legend" in str(exc), str(exc))
+    else:
+        check("非法 multi.legend 被校验拦下", False, "未抛出")
+    bad_cfg = load_config(None)
+    bad_cfg["multi"]["share_ylim"] = "all"
+    try:
+        validate_config(bad_cfg)
+    except CfgErr as exc:
+        check("非法 multi.share_ylim 被校验拦下", "share_ylim" in str(exc), str(exc))
+    else:
+        check("非法 multi.share_ylim 被校验拦下", False, "未抛出")
+
+
+def _multi_figure(cfg, cities, grid=None):
+    """渲染多图但**不落盘**，返回 (Figure, report)。"""
+    from src import chart as chart_mod
+
+    captured: dict = {}
+    original = chart_mod._save
+    chart_mod._save = lambda fig, out_paths, cfg: (captured.__setitem__("fig", fig), out_paths)[1]
+    try:
+        report: dict = {}
+        render_multi_city_chart(cities, cfg, [], None, report, grid=grid)
+        captured["report"] = report
+    finally:
+        chart_mod._save = original
+    fig = captured["fig"]
+    fig.canvas.draw()
+    return fig, captured.get("report") or {}
+
+
+def _legend_count(fig) -> int:
+    return len(list(fig.legends) + [a.get_legend() for a in fig.axes if a.get_legend() is not None])
+
+
+def test_multi_city_chart() -> None:
+    """多图：同一画布多城市；最左列留左轴、最右列留右轴；同行量程统一；空位不画。"""
+    from src import chart as chart_mod
+
+    cities = [city(237), city(1), city(156), city(1007)]
+    cfg = load_config(None, None, [("multi.grid", "2x2")])
+    fig, report = _multi_figure(cfg, cities, (2, 2))
+
+    # 每格一套主轴 + 副轴（主/副轴由 subplots 与 twinx 依次创建，顺序即面板顺序）
+    check("2x2 四格各有一套主轴+副轴", len(fig.axes) == 8, str(len(fig.axes)))
+    primaries, secondaries = fig.axes[:4], fig.axes[4:8]
+
+    check("四格都绘制（无空位）",
+          [a.get_visible() for a in primaries] == [True] * 4,
+          str([a.get_visible() for a in primaries]))
+    check("每格标题含对应城市名",
+          [a.get_title() for a in primaries] == [f"{c.city_name} 气候统计" for c in cities],
+          str([a.get_title() for a in primaries]))
+    check("每格横轴刻度保持原样（12 个月）",
+          all(len(a.get_xticklabels()) == 12 for a in primaries),
+          str([len(a.get_xticklabels()) for a in primaries]))
+
+    # 轴上刻度：最左列保留左轴 → 只有第 0 列可见；最右列保留右轴 → 只有第 1 列可见
+    left_shown = [bool(a.yaxis.get_majorticklabels()) for a in primaries]
+    check("最左列保留左轴刻度、右列隐藏", left_shown == [True, False, True, False], str(left_shown))
+    right_shown = [bool(a.yaxis.get_majorticklabels()) for a in secondaries]
+    check("最右列保留右轴刻度、左列隐藏", right_shown == [False, True, False, True], str(right_shown))
+    check("隐藏侧连轴脊一起收掉",
+          [a.spines["left"].get_visible() for a in primaries] == [True, False, True, False]
+          and [a.spines["right"].get_visible() for a in secondaries]
+          == [False, True, False, True],
+          f"{[a.spines['left'].get_visible() for a in primaries]} "
+          f"{[a.spines['right'].get_visible() for a in secondaries]}")
+    check("其余子图不写纵轴标题",
+          [bool(a.get_ylabel()) for a in primaries] == [True, False, True, False],
+          str([a.get_ylabel() for a in primaries]))
+    check("底部横轴脊照旧保留", all(a.spines["bottom"].get_visible() for a in primaries))
+
+    # 量程：同一行统一（含副轴），不同行各自独立
+    check("同一行主轴量程一致",
+          primaries[0].get_ylim() == primaries[1].get_ylim()
+          and primaries[2].get_ylim() == primaries[3].get_ylim(),
+          f"{primaries[0].get_ylim()} {primaries[1].get_ylim()} "
+          f"{primaries[2].get_ylim()} {primaries[3].get_ylim()}")
+    check("同一行副轴量程一致",
+          secondaries[0].get_ylim() == secondaries[1].get_ylim(),
+          f"{secondaries[0].get_ylim()} {secondaries[1].get_ylim()}")
+    check("不同行量程相互独立（北京与澳门数据不同）",
+          primaries[0].get_ylim() != primaries[2].get_ylim(),
+          f"{primaries[0].get_ylim()} vs {primaries[2].get_ylim()}")
+    check("report 记下画布与城市", report.get("grid") == "2x2" and report.get("drawn") == 4,
+          str(report))
+    check("整幅只画一个图例（multi.legend=figure 默认）", _legend_count(fig) == 1,
+          str(_legend_count(fig)))
+    chart_mod.plt.close(fig)
+
+    # share_ylim=none：同一行也各画各的
+    cfg_none = load_config(None, None, [("multi.grid", "2x2"), ("multi.share_ylim", "none")])
+    fig_none, _ = _multi_figure(cfg_none, cities, (2, 2))
+    check("share_ylim=none 时同一行也不统一",
+          fig_none.axes[0].get_ylim() != fig_none.axes[1].get_ylim(),
+          f"{fig_none.axes[0].get_ylim()} vs {fig_none.axes[1].get_ylim()}")
+    chart_mod.plt.close(fig_none)
+
+    # 图例三态
+    cfg_none_legend = load_config(None, None, [("multi.legend", "none")])
+    fig_nl, _ = _multi_figure(cfg_none_legend, cities, (4, 1))
+    check("multi.legend=none 时不画图例", _legend_count(fig_nl) == 0, str(_legend_count(fig_nl)))
+    chart_mod.plt.close(fig_nl)
+    cfg_per = load_config(None, None, [("multi.legend", "per_chart")])
+    fig_per, _ = _multi_figure(cfg_per, cities, (4, 1))
+    check("multi.legend=per_chart 时每格一个图例", _legend_count(fig_per) == 4,
+          str(_legend_count(fig_per)))
+    chart_mod.plt.close(fig_per)
+
+    # 默认排列：1×N 全横排
+    fig_auto, report_auto = _multi_figure(load_config(None), cities)
+    check("默认排列为 1 行 N 列", report_auto.get("grid") == "4x1", str(report_auto))
+    left_flags = [fig_auto.axes[i].spines["left"].get_visible() for i in range(4)]
+    check("1 行 4 列时只最左格留左轴", left_flags == [True, False, False, False], str(left_flags))
+    chart_mod.plt.close(fig_auto)
+
+    # 城市数少于格子：空位不画
+    fig_few, report_few = _multi_figure(cfg, cities[:3], (2, 2))
+    check("城市不足时末格隐藏",
+          [a.get_visible() for a in fig_few.axes[:4]] == [True, True, True, False],
+          str([a.get_visible() for a in fig_few.axes[:4]]))
+    check("城市不足时 report.drawn 记实际格数", report_few.get("drawn") == 3, str(report_few))
+    chart_mod.plt.close(fig_few)
+
+    # 画布尺寸 = 单个 figsize × (列, 行)；multi.figsize 可覆盖
+    fig_size, _ = _multi_figure(cfg, cities, (2, 2))
+    base = load_config(None)["figure"]["figsize"]
+    check("画布按行列放大", fig_size.get_size_inches().tolist() == [base[0] * 2, base[1] * 2],
+          str(fig_size.get_size_inches().tolist()))
+    chart_mod.plt.close(fig_size)
+    cfg_fig = load_config(None, None, [("multi.figsize", [8.0, 5.0])])
+    fig_override, _ = _multi_figure(cfg_fig, cities, (2, 2))
+    check("multi.figsize 覆盖整幅画布",
+          fig_override.get_size_inches().tolist() == [8.0, 5.0],
+          str(fig_override.get_size_inches().tolist()))
+    chart_mod.plt.close(fig_override)
+
+
+def test_run_multi_offline(tmp: Path) -> None:
+    """多图编排：城市数与画布不匹配时只告警不报错，且能落盘。"""
+    import src.pipeline as pipeline_mod
+
+    class _Rec:
+        def __init__(self) -> None:
+            self.msgs: list[tuple[str, str]] = []
+
+        def debug(self, msg: str) -> None:
+            self.msgs.append(("DEBUG", str(msg)))
+
+        def info(self, msg: str) -> None:
+            self.msgs.append(("INFO", str(msg)))
+
+        def warning(self, msg: str) -> None:
+            self.msgs.append(("WARN", str(msg)))
+
+        def error(self, msg: str) -> None:
+            self.msgs.append(("ERROR", str(msg)))
+
+        def notes(self) -> str:
+            return "\n".join(f"{lv}: {m}" for lv, m in self.msgs)
+
+    out_dir = VERIFY_DIR / "多图"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    original = pipeline_mod.fetch_city
+    pipeline_mod.fetch_city = lambda client, cfg, city_id, logger: city(city_id)
+    try:
+        # 1) 4 城 2x2：正好填满
+        logger = _Rec()
+        cfg = load_config(None, None, [("multi.grid", "2x2")])
+        summary = pipeline_mod.run_multi(cfg, [237, 1, 156, 1007], logger, out_dir)
+        check("多图落盘成功", len(summary.multi_charts) == 1
+              and summary.multi_charts[0].exists()
+              and summary.multi_charts[0].stat().st_size > 5000,
+              str(summary.multi_charts))
+        check("画布记入汇总", summary.grid == "2x2" and summary.skipped_ids == [],
+              f"{summary.grid} {summary.skipped_ids}")
+        check("4 城填满 2x2 时不告警", "不匹配" not in logger.notes(), logger.notes())
+        check("汇总列出已绘制城市",
+              all("已绘制" in ln for ln in summary.describe().splitlines()[1:]),
+              summary.describe())
+
+        # 2) 3 城塞 2x2：留空 + 告警，不报错
+        logger = _Rec()
+        summary = pipeline_mod.run_multi(cfg, [237, 1, 156], logger, out_dir)
+        check("城市数不足时告警（不报错）",
+              any("不匹配" in m and "留空" in m for _lv, m in logger.msgs), logger.notes())
+        check("城市数不足时仍出图", len(summary.multi_charts) == 1, str(summary.multi_charts))
+
+        # 3) 5 城塞 2x2：超出部分不绘制 + 告警
+        logger = _Rec()
+        summary = pipeline_mod.run_multi(cfg, [237, 1, 156, 1007, 2184], logger, out_dir)
+        check("城市数超出时告警并列出未绘制城市",
+              any("超过画布" in m and "希洪" in m for _lv, m in logger.msgs), logger.notes())
+        check("超出格数的城市记入 skipped_ids",
+              summary.skipped_ids == [2184] and len(summary.drawn_ids) == 4,
+              f"{summary.skipped_ids} {summary.drawn_ids}")
+        check("超出部分在城市清单里标注未绘制",
+              "超出画布格数，未绘制" in summary.describe(), summary.describe())
+        check("超出时仍正常出图", len(summary.multi_charts) == 1, str(summary.multi_charts))
+
+        # 4) 取数失败的城市：留空 + 告警，其余照画
+        def _boom(client, cfg, city_id, logger):
+            if city_id == 1:
+                raise pipeline_mod.FetchError("模拟取数失败")
+            return city(city_id)
+
+        pipeline_mod.fetch_city = _boom
+        logger = _Rec()
+        summary = pipeline_mod.run_multi(load_config(None, None, [("multi.grid", "2x2")]),
+                                         [237, 1, 156], logger, out_dir)
+        check("取数失败的城市告警且不影响其余",
+              any(lv == "ERROR" and "取数失败" in m for lv, m in logger.msgs)
+              and len(summary.multi_charts) == 1, logger.notes())
+        check("失败城市不计入失败退出条件之外的统计",
+              summary.fail_count == 1 and summary.ok_count == 2,
+              f"{summary.fail_count} {summary.ok_count}")
+
+        # 5) 文件名含画布尺寸，不同排列不会互相覆盖
+        pipeline_mod.fetch_city = lambda client, cfg, city_id, logger: city(city_id)
+        cfg_row = load_config(None)
+        row_summary = pipeline_mod.run_multi(cfg_row, [237, 1], _Rec(), out_dir)
+        check("默认横排与 2x2 的产物文件名不冲突",
+              row_summary.multi_charts[0].name != summary.multi_charts[0].name
+              and "2x1" in row_summary.multi_charts[0].name,
+              f"{row_summary.multi_charts[0].name} / {summary.multi_charts[0].name}")
+    finally:
+        pipeline_mod.fetch_city = original
+
+
 # ======================= 5. 城市索引 =======================
 
 def test_cli_batch_targets() -> None:
@@ -1314,6 +1587,80 @@ def test_request_throttle() -> None:
         shutil.rmtree(cache_dir, ignore_errors=True)
 
 
+def test_proxy_config() -> None:
+    """代理与证书校验只认配置，不被环境变量暗中接管。
+
+    实测踩过的坑：env 里留着指向失效端口的 ``HTTP_PROXY``／``HTTPS_PROXY`` 时，
+    即使 ``fetch.proxy`` 为空（语义是"直连"），urllib 的默认 opener 也会把请求送去
+    那个死端口，表现为全量 ``URLError: [WinError 10061] 目标计算机积极拒绝``。
+    """
+    import os
+    import ssl
+    import urllib.request
+
+    from src import http_client as hc
+
+    saved = {k: os.environ.get(k) for k in
+             ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")}
+    # 只写、不按小写名清理：Windows 上 os.environ 大小写不敏感，pop("http_proxy") 会把
+    # 刚设好的 HTTP_PROXY 一起删掉（本测试第一版就栽在这上面）。
+    os.environ["HTTP_PROXY"] = "http://127.0.0.1:7897"
+    os.environ["HTTPS_PROXY"] = "http://127.0.0.1:7897"
+
+    def proxies_of(client) -> dict:
+        handler = [h for h in client.opener.handlers
+                   if isinstance(h, urllib.request.ProxyHandler)][0]
+        return dict(handler.proxies)
+
+    def ssl_context_of(client):
+        handlers = [h for h in client.opener.handlers
+                    if isinstance(h, urllib.request.HTTPSHandler)]
+        return getattr(handlers[0], "_context", None) if handlers else None
+
+    try:
+        base = dict(load_config(None)["fetch"])
+        check("默认 use_env_proxy 为 false", base.get("use_env_proxy") is False,
+              str(base.get("use_env_proxy")))
+        check("env 里确实有代理（前提成立）",
+              urllib.request.getproxies().get("https") == "http://127.0.0.1:7897",
+              str(urllib.request.getproxies()))
+
+        direct = hc.HttpClient(dict(base), cache_dir=None)
+        check("proxy 为空时忽略环境变量代理（直连）", proxies_of(direct) == {},
+              str(proxies_of(direct)))
+        check("直连处理器真的注册进了 opener（不是靠 ProxyHandler({}) 的副作用）",
+              any(isinstance(h, hc._NoProxyHandler) for h in direct.opener.handlers),
+              str([type(h).__name__ for h in direct.opener.handlers]))
+
+        env = hc.HttpClient(dict(base, use_env_proxy=True), cache_dir=None)
+        check("use_env_proxy=true 时才沿用环境变量代理",
+              proxies_of(env).get("https") == "http://127.0.0.1:7897",
+              str(proxies_of(env)))
+
+        explicit = hc.HttpClient(dict(base, proxy="http://127.0.0.1:7890"), cache_dir=None)
+        check("显式 proxy 生效且不被 env 覆盖",
+              proxies_of(explicit).get("https") == "http://127.0.0.1:7890",
+              str(proxies_of(explicit)))
+
+        # 注意：Python 3.13 的 HTTPSHandler 会把 context=None 落成"默认校验"上下文，
+        # 所以判据是 verify_mode（CERT_REQUIRED）而非 _context 是否为 None。
+        ctx_verified = ssl_context_of(direct)
+        check("verify_ssl=true 时沿用默认证书校验",
+              ctx_verified is not None and ctx_verified.verify_mode != ssl.CERT_NONE,
+              f"{ctx_verified} verify_mode={getattr(ctx_verified, 'verify_mode', None)}")
+        unverified = hc.HttpClient(
+            dict(base, proxy="http://127.0.0.1:7890", verify_ssl=False), cache_dir=None)
+        ctx = ssl_context_of(unverified)
+        check("verify_ssl=false 在代理模式下同样生效",
+              ctx is not None and ctx.verify_mode == ssl.CERT_NONE, str(ctx))
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
 def test_city_index_flatten() -> None:
     raw = json.loads((ROOT / "tests" / "fixtures" / "country_index_zh.json").read_text(encoding="utf-8-sig"))
     entries = _flatten(raw)
@@ -1387,10 +1734,14 @@ def main() -> int:
     run("绘图层：极值标注自动避让", test_extremes_label_avoidance)
     run("绘图层：极值标注窄空间避让", test_extremes_label_avoidance_cramped_axis)
     run("绘图层：多城市对比", test_compare_render)
+    run("绘图层：多图排列解析", test_parse_grid)
+    run("绘图层：多图（多城市同画布）", test_multi_city_chart)
+    run("编排层：多图告警与落盘", lambda: test_run_multi_offline(tmp))
     run("城市索引：反查与筛选", test_city_index_flatten)
     run("CLI：批量目标解析", test_cli_batch_targets)
     run("CLI：--mark 绘图微调", test_cli_mark)
     run("请求层：批量排队限速", test_request_throttle)
+    run("请求层：代理与证书只认配置", test_proxy_config)
 
     if "--network" in sys.argv:
         run("联网：真实请求与 404", test_network)
