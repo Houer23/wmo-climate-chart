@@ -1,8 +1,9 @@
-"""项目依赖（绘图 / XLSX / YAML 配置需要第三方库，HTTP 走标准库）。
-
-    pip install -r requirements.txt
-"""
-
+# 项目依赖：绘图 / XLSX / YAML 配置需要第三方库，HTTP 请求走标准库（无额外依赖）。
+#
+# 安装：pip install -r requirements.txt
+#
+# 注意：requirements.txt 里只认 "#" 注释；此前这里用的是 Python 三引号说明，
+# pip 会把它当成依赖行解析并直接报 Invalid requirement，故改为注释。
 matplotlib>=3.8
 openpyxl>=3.1
 PyYAML>=6.0
