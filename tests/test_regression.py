@@ -1774,6 +1774,7 @@ def main() -> int:
     run("城市索引：反查与筛选", test_city_index_flatten)
     run("CLI：批量目标解析", test_cli_batch_targets)
     run("CLI：--mark 绘图微调", test_cli_mark)
+    run("显示层：城市短名开关", test_city_display_name)
     run("请求层：批量排队限速", test_request_throttle)
     run("请求层：代理与证书只认配置", test_proxy_config)
 
