@@ -210,7 +210,9 @@ def verify_city_page(client: HttpClient, cfg: dict[str, Any], city_id: int, logg
     """
     url = city_page_url(cfg["fetch"], city_id, cfg["data"].get("lang", "zh"))
     try:
-        result = client.get(url, use_cache=True, accept="text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
+        result = client.get(url, use_cache=True,
+                            accept="text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+                            note=f"页面校验 cityId {city_id}")
     except CityNotFoundError as exc:
         raise CityNotFoundError(f"城市页面不存在，cityId={city_id} 可能无效（{exc}）") from exc
     title = _extract_page_title(result.text)
@@ -230,7 +232,8 @@ def fetch_city(client: HttpClient, cfg: dict[str, Any], city_id: int, logger=Non
                 logger.warning(f"页面校验未通过，继续尝试数据文件：{exc}")
 
     url = city_data_url(cfg["fetch"], city_id, cfg["data"].get("lang", "zh"))
-    result = client.get(url, accept="application/json,text/xml,*/*;q=0.8")
+    result = client.get(url, accept="application/json,text/xml,*/*;q=0.8",
+                        note=f"气候数据 cityId {city_id}")
     city = parse_city_text(result.text, city_id=city_id, lang=cfg["data"].get("lang", "zh"))
 
     if city.mean_derived and logger:

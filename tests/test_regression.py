@@ -68,6 +68,28 @@ def run(name: str, func) -> None:
         RESULTS.append((name, False, f"{type(exc).__name__}: {exc}\n{traceback.format_exc(limit=3)}"))
 
 
+class _Recorder:
+    """把日志收集到内存，便于断言（与 CLI 的 Logger 同接口）。"""
+
+    def __init__(self) -> None:
+        self.msgs: list[tuple[str, str]] = []
+
+    def debug(self, msg: str) -> None:
+        self.msgs.append(("DEBUG", str(msg)))
+
+    def info(self, msg: str) -> None:
+        self.msgs.append(("INFO", str(msg)))
+
+    def warning(self, msg: str) -> None:
+        self.msgs.append(("WARN", str(msg)))
+
+    def error(self, msg: str) -> None:
+        self.msgs.append(("ERROR", str(msg)))
+
+    def notes(self) -> str:
+        return "\n".join(f"{lv}: {m}" for lv, m in self.msgs)
+
+
 def fixture(city_id: int) -> str:
     path = FIXTURES / f"{city_id}_zh.json"
     if not path.exists():
@@ -1272,32 +1294,13 @@ def test_run_multi_offline(tmp: Path) -> None:
     """多图编排：城市数与画布不匹配时只告警不报错，且能落盘。"""
     import src.pipeline as pipeline_mod
 
-    class _Rec:
-        def __init__(self) -> None:
-            self.msgs: list[tuple[str, str]] = []
-
-        def debug(self, msg: str) -> None:
-            self.msgs.append(("DEBUG", str(msg)))
-
-        def info(self, msg: str) -> None:
-            self.msgs.append(("INFO", str(msg)))
-
-        def warning(self, msg: str) -> None:
-            self.msgs.append(("WARN", str(msg)))
-
-        def error(self, msg: str) -> None:
-            self.msgs.append(("ERROR", str(msg)))
-
-        def notes(self) -> str:
-            return "\n".join(f"{lv}: {m}" for lv, m in self.msgs)
-
     out_dir = VERIFY_DIR / "多图"
     out_dir.mkdir(parents=True, exist_ok=True)
     original = pipeline_mod.fetch_city
     pipeline_mod.fetch_city = lambda client, cfg, city_id, logger: city(city_id)
     try:
         # 1) 4 城 2x2：正好填满
-        logger = _Rec()
+        logger = _Recorder()
         cfg = load_config(None, None, [("multi.grid", "2x2")])
         summary = pipeline_mod.run_multi(cfg, [237, 1, 156, 1007], logger, out_dir)
         check("多图落盘成功", len(summary.multi_charts) == 1
@@ -1312,14 +1315,14 @@ def test_run_multi_offline(tmp: Path) -> None:
               summary.describe())
 
         # 2) 3 城塞 2x2：留空 + 告警，不报错
-        logger = _Rec()
+        logger = _Recorder()
         summary = pipeline_mod.run_multi(cfg, [237, 1, 156], logger, out_dir)
         check("城市数不足时告警（不报错）",
               any("不匹配" in m and "留空" in m for _lv, m in logger.msgs), logger.notes())
         check("城市数不足时仍出图", len(summary.multi_charts) == 1, str(summary.multi_charts))
 
         # 3) 5 城塞 2x2：超出部分不绘制 + 告警
-        logger = _Rec()
+        logger = _Recorder()
         summary = pipeline_mod.run_multi(cfg, [237, 1, 156, 1007, 2184], logger, out_dir)
         check("城市数超出时告警并列出未绘制城市",
               any("超过画布" in m and "希洪" in m for _lv, m in logger.msgs), logger.notes())
@@ -1337,7 +1340,7 @@ def test_run_multi_offline(tmp: Path) -> None:
             return city(city_id)
 
         pipeline_mod.fetch_city = _boom
-        logger = _Rec()
+        logger = _Recorder()
         summary = pipeline_mod.run_multi(load_config(None, None, [("multi.grid", "2x2")]),
                                          [237, 1, 156], logger, out_dir)
         check("取数失败的城市告警且不影响其余",
@@ -1350,7 +1353,7 @@ def test_run_multi_offline(tmp: Path) -> None:
         # 5) 文件名含画布尺寸，不同排列不会互相覆盖
         pipeline_mod.fetch_city = lambda client, cfg, city_id, logger: city(city_id)
         cfg_row = load_config(None)
-        row_summary = pipeline_mod.run_multi(cfg_row, [237, 1], _Rec(), out_dir)
+        row_summary = pipeline_mod.run_multi(cfg_row, [237, 1], _Recorder(), out_dir)
         check("默认横排与 2x2 的产物文件名不冲突",
               row_summary.multi_charts[0].name != summary.multi_charts[0].name
               and "2x1" in row_summary.multi_charts[0].name,
@@ -1695,6 +1698,107 @@ def test_proxy_config() -> None:
                 os.environ[key] = value
 
 
+def test_request_progress_and_dns() -> None:
+    """请求阶段要有进度日志；DNS 解析要单独兜超时（urllib 的 timeout 不覆盖 getaddrinfo）。"""
+    import socket
+    import time
+
+    from src import http_client as hc
+
+    def stub_client(**extra) -> "hc.HttpClient":
+        client = hc.HttpClient({"timeout": 5, "retries": 0, "min_interval": 0, **extra})
+        client._request_once = lambda url, headers: hc.FetchResult(
+            url=url, status=200, content=b"{}", text="{}")
+        return client
+
+    # ---- 进度日志：发起前 INFO「请求：<note>」，完成后 DEBUG（状态码/耗时） ----
+    logger = _Recorder()
+    client = stub_client()
+    client.logger = logger
+    result = client.get("https://example.invalid/a", note="页面校验 cityId 237")
+    check("请求前打一条 INFO 进度日志（含业务说明）",
+          any(lv == "INFO" and m == "请求：页面校验 cityId 237" for lv, m in logger.msgs),
+          logger.notes())
+    check("请求完成后打一条 DEBUG（含状态码与耗时）",
+          any(lv == "DEBUG" and "HTTP 200" in m and "s，第 1 次尝试" in m
+              for lv, m in logger.msgs),
+          logger.notes())
+    check("进度日志不影响返回结果", result.status == 200 and result.attempts == 1,
+          f"{result.status} {result.attempts}")
+
+    logger = _Recorder()
+    client = stub_client()
+    client.logger = logger
+    client.get("https://example.invalid/b")
+    check("note 缺省时用 URL 作为说明",
+          any(m == "请求：https://example.invalid/b" for _lv, m in logger.msgs),
+          logger.notes())
+
+    # ---- DNS 预解析超时 ----
+    real_lookup = socket.getaddrinfo
+    looked: list[str] = []
+
+    def slow_lookup(host, port=None, *args, **kwargs):
+        looked.append(host)
+        time.sleep(1.5)
+        return real_lookup("127.0.0.1", port, *args, **kwargs)
+
+    socket.getaddrinfo = slow_lookup
+    try:
+        client = hc.HttpClient({"timeout": 5, "resolve_timeout": 0.2})
+        started = time.monotonic()
+        try:
+            client._precheck_dns("https://slow.invalid/x")
+        except socket.timeout as exc:
+            elapsed = time.monotonic() - started
+            check("DNS 卡住时按 resolve_timeout 超时抛出（不再无限静默）",
+                  elapsed < 1.0 and "DNS 解析超时" in str(exc), f"{elapsed:.2f}s / {exc}")
+        else:
+            check("DNS 卡住时按 resolve_timeout 超时抛出（不再无限静默）", False, "未抛出")
+
+        looked.clear()
+        hc.HttpClient({"timeout": 5, "resolve_timeout": 0})._precheck_dns(
+            "https://any.invalid/x")
+        check("resolve_timeout=0 时不做预解析", looked == [], str(looked))
+
+        client = hc.HttpClient({"timeout": 5, "resolve_timeout": 5})
+        looked.clear()
+        client._precheck_dns("https://ok.invalid/a")
+        client._precheck_dns("https://ok.invalid/b")     # 同主机不再重复预解析
+        check("同一主机只预解析一次（进程内缓存）", looked == ["ok.invalid"], str(looked))
+
+        def failing_lookup(host, port=None, *args, **kwargs):
+            raise socket.gaierror(f"getaddrinfo failed: {host}")
+
+        socket.getaddrinfo = failing_lookup
+        try:
+            hc.HttpClient({"timeout": 5, "resolve_timeout": 5})._precheck_dns(
+                "https://bad.invalid/x")
+        except socket.gaierror as exc:
+            check("解析失败原样抛出（交由重试链路告警）", "bad.invalid" in str(exc), str(exc))
+        else:
+            check("解析失败原样抛出（交由重试链路告警）", False, "未抛出")
+
+        # 网络异常的告警要带上异常文本，便于判断卡在哪一步
+        logger = _Recorder()
+        client = hc.HttpClient({"timeout": 5, "retries": 0, "min_interval": 0}, logger=logger)
+
+        def boom(url, headers):
+            raise socket.gaierror("getaddrinfo failed: boom.invalid")
+
+        client._request_once = boom
+        try:
+            client.get("https://boom.invalid/x", note="页面校验 cityId 1")
+        except Exception:  # noqa: BLE001 - 只关心告警内容
+            pass
+        check("网络异常告警带上具体原因",
+              any(lv == "WARN" and "gaierror" in m and "getaddrinfo failed" in m
+                  for lv, m in logger.msgs),
+              logger.notes())
+    finally:
+        socket.getaddrinfo = real_lookup
+
+
 def test_city_index_flatten() -> None:
     raw = json.loads((ROOT / "tests" / "fixtures" / "country_index_zh.json").read_text(encoding="utf-8-sig"))
     entries = _flatten(raw)
@@ -1777,6 +1881,7 @@ def main() -> int:
     run("显示层：城市短名开关", test_city_display_name)
     run("请求层：批量排队限速", test_request_throttle)
     run("请求层：代理与证书只认配置", test_proxy_config)
+    run("请求层：进度日志与 DNS 兜超时", test_request_progress_and_dns)
 
     if "--network" in sys.argv:
         run("联网：真实请求与 404", test_network)

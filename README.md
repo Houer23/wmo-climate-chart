@@ -137,7 +137,7 @@ DrawClimateChart/
 │   └── pipeline.py           # 编排：单城 / 批量 / 对比 / 多图
 ├── scripts/                  # 可复用工具（夹具抓取 / CLI 验收 / 缺失值扫描）
 ├── tests/
-│   ├── test_regression.py    # 回归测试（离线可跑，382 项断言）
+│   ├── test_regression.py    # 回归测试（离线可跑，401 项断言）
 │   ├── fixtures/             # 真实响应样本（含城市索引与 samples/ 抽样数据）
 │   └── _output/              # 测试产物：渲染核对图 / 表格中间输出（不入库）
 ├── output/                   # 交付物：表格与图（生成物，不入库）

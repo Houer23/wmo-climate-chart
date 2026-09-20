@@ -165,6 +165,7 @@ DEFAULTS: dict[str, Any] = {
         "city_index_path": "{lang}/json/Country_{lang}.xml",
         "fetch_page_first": True,          # 先取 HTML 页做存在性校验与元信息核对
         "timeout": 30,
+        "resolve_timeout": 10.0,           # DNS 预解析超时（秒）；0 = 关闭该预检查
         "retries": 4,                      # 应对实测的间歇性 TLS 断连
         "backoff": 1.2,
         "backoff_max": 15,
@@ -1175,6 +1176,16 @@ def validate_config(cfg: dict[str, Any]) -> list[str]:
             float(multi[key])
         except (TypeError, ValueError) as exc:
             raise ConfigError(f"multi.{key} 必须是数字或 null（当前：{multi[key]!r}）") from exc
+
+    # 9) 请求层：DNS 预解析超时（0 表示关闭预检查）
+    raw_resolve = cfg["fetch"].get("resolve_timeout", 0) or 0
+    try:
+        resolve_timeout = float(raw_resolve)
+    except (TypeError, ValueError) as exc:
+        raise ConfigError("fetch.resolve_timeout 必须是数字（秒；0 = 关闭 DNS 预检查）"
+                          f"（当前：{raw_resolve!r}）") from exc
+    if resolve_timeout < 0:
+        raise ConfigError(f"fetch.resolve_timeout 不能为负数（当前：{resolve_timeout}）")
 
     return warnings
 

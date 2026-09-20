@@ -106,7 +106,8 @@ profiles:
 | `data_path` | str | `"{lang}/json/{city_id}_{lang}.xml"` | 气候数据路径模板（内容实为 JSON） |
 | `city_index_path` | str | `"{lang}/json/Country_{lang}.xml"` | 城市索引路径模板 |
 | `fetch_page_first` | bool | `true` | 是否先请求 HTML 页做存在性校验（页面本身不含数据） |
-| `timeout` | 秒 | `30` | 单次请求超时 |
+| `timeout` | 秒 | `30` | 单次请求超时（作用于 socket 连接与读写） |
+| `resolve_timeout` | 秒 | `10.0` | **DNS 预解析超时**。`urllib` 的 `timeout` 不覆盖 `getaddrinfo`，DNS 被劫持/不可达时会长时间既无结果也无告警；这里单独兜一层超时，超时按 `socket.timeout` 抛出并进入既有的重试/告警链路。同一主机解析成功过一次即不再重复预检查；设 `0` 关闭预检查 |
 | `retries` | int | `4` | 失败重试次数（应对实测的间歇性 TLS 断连） |
 | `backoff` | 秒 | `1.2` | 退避基数，第 n 次重试等待 `backoff × 2^(n-1)` |
 | `backoff_max` | 秒 | `15` | 单次退避上限 |

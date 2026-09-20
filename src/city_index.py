@@ -208,9 +208,8 @@ def load_city_index(client: HttpClient, cfg: dict[str, Any], cache_file: Path,
                 logger.warning("城市索引缓存损坏，将重新拉取")
 
     url = city_index_url(cfg["fetch"], cfg["data"].get("lang", "zh"))
-    if logger:
-        logger.info(f"拉取城市索引：{url}")
-    result = client.get(url, accept="application/json,text/xml,*/*;q=0.8")
+    # 进度说明交给请求层统一打（「请求：城市索引」），这里不再重复一条 INFO
+    result = client.get(url, accept="application/json,text/xml,*/*;q=0.8", note="城市索引")
     try:
         payload = json.loads(result.text.lstrip("\ufeff"))
     except ValueError as exc:

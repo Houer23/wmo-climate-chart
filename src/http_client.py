@@ -18,6 +18,7 @@ import hashlib
 import json
 import socket
 import ssl
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -148,6 +149,9 @@ class HttpClient:
         # 默认 false：代理只认 fetch.proxy，避免"配置写着空、实际走了 env 里的死代理"。
         self.use_env_proxy = bool(self.cfg.get("use_env_proxy", False))
         self.opener = self._build_opener()
+        # DNS 预解析超时（秒）；0 = 不做预检查。详见 _precheck_dns。
+        self.resolve_timeout = float(self.cfg.get("resolve_timeout", 10.0) or 0.0)
+        self._resolved_hosts: set[str] = set()   # 进程内已确认可解析的主机，避免重复预解析
 
         cache_cfg = self.cfg.get("cache") or {}
         self.cache_enabled = bool(cache_cfg.get("enabled", True))
@@ -233,12 +237,19 @@ class HttpClient:
         use_cache: bool = True,
         accept: Optional[str] = None,
         extra_headers: Optional[dict[str, str]] = None,
+        note: str = "",
     ) -> FetchResult:
-        """GET 请求，带缓存与指数退避重试。404 立即抛 CityNotFoundError。"""
+        """GET 请求，带缓存与指数退避重试。404 立即抛 CityNotFoundError。
+
+        ``note`` 是这次请求的**业务说明**（如「页面校验 cityId 237」），只用于日志：发起前
+        打一条 INFO「请求：…」，完成后打一条 DEBUG（状态码/字节数/耗时/第几次尝试）。这样
+        "卡在哪个请求上"一眼可见——此前请求阶段完全静默，网络慢时看起来就像卡死。
+        """
+        desc = note or url
         if use_cache:
             cached = self._read_cache(url)
             if cached is not None:
-                self._log("debug", f"命中缓存：{url}")
+                self._log("debug", f"命中缓存（{desc}）：{url}")
                 return cached
 
         headers = dict(self.headers)
@@ -247,6 +258,8 @@ class HttpClient:
         if extra_headers:
             headers.update(extra_headers)
 
+        self._log("info", f"请求：{desc}")
+        started = time.monotonic()
         last_error: Optional[Exception] = None
         for attempt in range(1, self.retries + 2):
             throttle(self.min_interval, self.logger)   # 连带重试一起限速，每秒最多 1 次请求
@@ -256,6 +269,8 @@ class HttpClient:
                 self._write_cache(url, result.status, result.content, result.headers)
                 self._write_raw(url, result.content)
                 result.attempts = attempt
+                self._log("debug", f"完成（{desc}）：HTTP {result.status}，{len(result.content)} 字节，"
+                                   f"{time.monotonic() - started:.1f}s，第 {attempt} 次尝试")
                 return result
             except CityNotFoundError:
                 raise
@@ -268,7 +283,8 @@ class HttpClient:
                 self._log("warning", f"HTTP {exc.code}，第 {attempt} 次尝试失败：{url}")
             except (urllib.error.URLError, ssl.SSLError, socket.timeout, TimeoutError, OSError) as exc:
                 last_error = exc
-                self._log("warning", f"网络异常（{type(exc).__name__}），第 {attempt} 次尝试失败：{url}")
+                self._log("warning", f"网络异常（{type(exc).__name__}: {exc}），"
+                                     f"第 {attempt} 次尝试失败：{url}")
 
             if attempt <= self.retries:
                 self.retry_count += 1
@@ -306,7 +322,45 @@ class HttpClient:
             handlers.append(urllib.request.HTTPSHandler(context=context))
         return urllib.request.build_opener(*handlers)
 
+    def _precheck_dns(self, url: str) -> None:
+        """带超时的 DNS 预解析，避免坏 DNS 让进程"无限静默"。
+
+        ``urllib`` 的 ``timeout`` 只作用于 socket 的连接与读写，**不覆盖** ``getaddrinfo``：
+        DNS 被劫持或不可达时，进程会长时间既没有结果也没有告警——实测的"卡住不动"就有这种
+        成因。这里把解析放进守护线程、只等 ``fetch.resolve_timeout`` 秒，超时按
+        ``socket.timeout`` 抛出，交给既有的重试与告警链路处理。
+
+        同一主机在进程内只要解析成功过一次就不再重复预检查；``fetch.resolve_timeout=0`` 可
+        整体关闭该预检查（回到"完全交给系统解析"的行为）。
+        """
+        limit = self.resolve_timeout
+        if limit <= 0:
+            return
+        host = urllib.parse.urlsplit(url).hostname
+        if not host or host in self._resolved_hosts:
+            return
+        result: dict[str, Any] = {}
+        done = threading.Event()
+
+        def worker() -> None:
+            try:
+                socket.getaddrinfo(host, None)
+            except BaseException as exc:        # noqa: BLE001 - 原样回传给主线程
+                result["error"] = exc
+            finally:
+                done.set()
+
+        threading.Thread(target=worker, name="dns-precheck", daemon=True).start()
+        if not done.wait(limit):
+            raise socket.timeout(f"DNS 解析超时（>{limit:g}s，host={host}）："
+                                 f"请检查本机 DNS / hosts 与 VPN 分流")
+        error = result.get("error")
+        if error is not None:
+            raise error
+        self._resolved_hosts.add(host)
+
     def _request_once(self, url: str, headers: dict[str, str]) -> FetchResult:
+        self._precheck_dns(url)               # DNS 不被 socket timeout 覆盖，单独兜一层超时
         req = urllib.request.Request(url, headers=headers, method="GET")
         response = self.opener.open(req, timeout=self.timeout)
         with response:
