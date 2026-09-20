@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
-from .models import CityClimate, format_number, normalize_series_key
+from .models import CityClimate, city_display_name, format_number, normalize_series_key
 
 RAIN_KEYS = ("rainfall", "raindays")
 TEMP_KEYS = ("minTemp", "maxTemp", "meanTemp")
@@ -157,7 +157,7 @@ def build_notes(city: CityClimate, cfg: dict[str, Any]) -> list[str]:
 
 def table_title(city: CityClimate, cfg: dict[str, Any]) -> str:
     return (cfg["table"].get("title_template") or "{city} 气候统计").format(
-        city=city.city_name, city_id=city.city_id, member=city.member.mem_name
+        city=city_display_name(city, cfg), city_id=city.city_id, member=city.member.mem_name
     )
 
 

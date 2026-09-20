@@ -1502,6 +1502,20 @@ def test_cli_mark() -> None:
     check("字号标记大小写等价", cfg["axes_primary"]["label_fontsize"] == 14.0
           and cfg["axes_secondary"]["label_fontsize"] == 12.0)
 
+    # ---- cy / cn：城市名是否取逗号前第一段 ----
+    cfg, notes, _ = marked([], ["cy"])
+    check("cy：城市名取逗号前第一段（短名）",
+          cfg["data"]["city_short_name"] is True
+          and any("短名" in n for n in notes), f"{cfg['data']['city_short_name']} {notes}")
+    cfg, notes, _ = marked([], ["cn"])
+    check("cn：城市名使用完整名称",
+          cfg["data"]["city_short_name"] is False
+          and any("完整名称" in n for n in notes), f"{cfg['data']['city_short_name']} {notes}")
+    cfg, _, _ = marked([("data.city_short_name", True)], ["cn"])
+    check("cn 覆盖既有短名设置", cfg["data"]["city_short_name"] is False)
+    cfg, _, _ = marked([], ["CY", "Cn"])                     # 大小写等价、后者覆盖
+    check("cy/cn 大小写等价且后者覆盖", cfg["data"]["city_short_name"] is False)
+
     # ---- 无法识别的标记：只告警，不中断，不影响其余标记 ----
     cfg, _, warns = marked([], ["hh", "x9", "r12", "z", "p20"])
     check("无法识别的标记只告警",
@@ -1526,6 +1540,26 @@ def test_cli_mark() -> None:
           f"{base.axes[0].get_ylim()} -> {shifted.axes[0].get_ylim()}")
     chart_mod.plt.close(base)
     chart_mod.plt.close(shifted)
+
+
+def test_city_display_name() -> None:
+    """data.city_short_name 控制城市名是否取逗号前第一段。"""
+    from src.models import CityClimate, city_display_name
+
+    full = CityClimate(city_id=1, city_name="洛杉矶，加利福尼亚州")
+    comma = CityClimate(city_id=2, city_name="London, United Kingdom")
+    none = CityClimate(city_id=3, city_name="Singapore")
+    cfg_full = {}                                  # 无 data 段 → 完整名称
+    cfg_short = {"data": {"city_short_name": True}}
+    cfg_false = {"data": {"city_short_name": False}}
+
+    check("默认/无配置：完整名称", city_display_name(full, cfg_full) == "洛杉矶，加利福尼亚州")
+    check("city_short_name=True：取逗号前第一段", city_display_name(full, cfg_short) == "洛杉矶")
+    check("city_short_name=False：完整名称", city_display_name(full, cfg_false) == "洛杉矶，加利福尼亚州")
+    check("无逗号时短名=全名", city_display_name(none, cfg_short) == "Singapore")
+    check("半角逗号同样截取前段", city_display_name(comma, cfg_short) == "London")
+    check("CityIndexEntry 同款属性也可取（无 city_name 兜底空串）",
+          city_display_name(object(), cfg_short) == "")
 
 
 def test_request_throttle() -> None:

@@ -20,7 +20,7 @@ from matplotlib.ticker import FuncFormatter, MaxNLocator  # noqa: E402
 from matplotlib.transforms import Bbox  # noqa: E402
 
 from .config_loader import resolve_grid  # noqa: E402
-from .models import CityClimate, format_coord, normalize_series_key  # noqa: E402
+from .models import CityClimate, city_display_name, format_coord, normalize_series_key  # noqa: E402
 
 TEMP_KEYS = ("minTemp", "maxTemp", "meanTemp")
 RAIN_KEYS = ("rainfall", "raindays")
@@ -944,7 +944,7 @@ def _save(fig, out_paths: list[Path], cfg: dict[str, Any]) -> list[Path]:
 
 def _context(city: CityClimate, cfg: dict[str, Any]) -> dict[str, str]:
     return {
-        "city": city.city_name,
+        "city": city_display_name(city, cfg),
         "city_id": str(city.city_id),
         "station": city.station_name or city.city_name,
         "member": city.member.mem_name,
@@ -1510,10 +1510,10 @@ def render_comparison_chart(cities: list[CityClimate], cfg: dict[str, Any],
         if str(cmpc.get("color_by", "order")) == "city_id":
             color = colors[city.city_id % len(colors)]
         else:
-            color = color_map.get(city.city_name) or colors[i % len(colors)]
+            color = color_map.get(city_display_name(city, cfg)) or colors[i % len(colors)]
         ls = linestyles[i % len(linestyles)]
         marker = markers[i % len(markers)]
-        label = str(cmpc.get("label_template", "{city}")).format(city=city.city_name)
+        label = str(cmpc.get("label_template", "{city}")).format(city=city_display_name(city, cfg))
         if cmpc.get("show_value_range", False):
             valid = values[np.isfinite(values)]
             if valid.size:

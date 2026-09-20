@@ -75,7 +75,7 @@ from src.config_loader import (
     write_template,
 )
 from src.http_client import FetchError
-from src.models import coord_pair
+from src.models import city_display_name, coord_pair
 from src.pipeline import (
     list_cities as list_cities_fn,
     resolve_city_ids,
@@ -161,6 +161,7 @@ def build_parser() -> argparse.ArgumentParser:
                            "tt<数字> 图表标题字号（tt0 = 不显示标题），"
                            "ts<数字> / rs<数字> 气温轴 / 降水轴刻度步长"
                            "（小于该轴量程 1/10 时不生效，防过密）；"
+                           "cy 城市名取逗号前第一段（短名），cn 城市名用完整名称；"
                            "无法识别的标记只告警，不中断、不影响其余标记")
 
     out = parser.add_argument_group("输出")
@@ -306,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
         for entry in entries:
             # 坐标列与 {lat} / {lon} 占位符共用一套显示口径（data.coord）
             coords = coord_pair(entry.latitude, entry.longitude, cfg)
-            print(f"{entry.city_id:>8}  {entry.city_name:<18} {entry.mem_name:<14} {coords}")
+            print(f"{entry.city_id:>8}  {city_display_name(entry, cfg):<18} {entry.mem_name:<14} {coords}")
         return 0
 
     # ---- 解析目标城市 ---------------------------------------------------

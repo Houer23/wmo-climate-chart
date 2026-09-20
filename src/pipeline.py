@@ -24,7 +24,7 @@ from .http_client import (
     city_data_url,
     city_page_url,
 )
-from .models import CityClimate, format_coord
+from .models import CityClimate, city_display_name, format_coord
 from .parser import NoClimateDataError, ParseError, parse_city_text
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -136,7 +136,7 @@ def _format_basename(cfg: dict[str, Any], city: CityClimate, key: str, default: 
     """按模板生成文件名主干；模板为空时回退默认值。"""
     template = cfg["output"].get(key) or default
     return _safe(str(template).format(
-        city=city.city_name or f"city{city.city_id}",
+        city=city_display_name(city, cfg) or f"city{city.city_id}",
         city_id=city.city_id,
         member=city.member.mem_name,
         station=city.station_name,

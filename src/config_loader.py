@@ -147,6 +147,7 @@ DEFAULTS: dict[str, Any] = {
         "month_label_style": "1月",        # 1月 | 一月 | Jan | 01
         "include_annual": False,           # 表格/图表是否附年值
         "auto_disable_empty_series": True, # 某元素全无数据时自动不绘制
+        "city_short_name": False,          # 城市名取逗号前第一段（如“洛杉矶，加利福尼亚州”→“洛杉矶”）；否=完整名称
         "coord": {                         # 经纬度显示（{lat} / {lon} 占位符、坐标列）
             "style": "direction",          # direction(带方向符号) | signed(纯数字，西经/南纬为负)
             "direction": "letter",         # letter(E/W/N/S) | hanzi(东/西/南/北)
@@ -690,6 +691,8 @@ def apply_marks(cfg: dict[str, Any], raw_items: Optional[Any] = None) -> tuple[l
     ``tt<数字>``                       图表标题字号；``tt0`` = 不显示标题
     ``ts<数字>``                       气温轴刻度步长；小于量程 1/10 时**不生效**（防过密）
     ``rs<数字>``                       降水轴刻度步长；同上限制
+    ``cy``                             城市名取逗号前第一段（短名）；如“洛杉矶，加利福尼亚州”→“洛杉矶”
+    ``cn``                             城市名使用完整名称（默认）
     =================================  ==========================================
 
     密度限制按该轴的**显式量程**（``axes_*.limit``）判定；轴为自动量程时无法预估跨度，
@@ -769,6 +772,14 @@ def apply_marks(cfg: dict[str, Any], raw_items: Optional[Any] = None) -> tuple[l
                 set_by_path(cfg, "axes_secondary.label_fontsize", size)
                 notes.append(f"--mark：降水轴标题字号 {size:g}")
             continue
+        # ---- cy / cn：城市名是否取逗号前第一段 ----
+        if lowered in ("cy", "cn"):
+            use_short = (lowered == "cy")   # cy = 取逗号前第一段（短名）；cn = 完整名称
+            set_by_path(cfg, "data.city_short_name", use_short)
+            notes.append("--mark：城市名取逗号前第一段（短名）"
+                         if use_short else "--mark：城市名使用完整名称")
+            continue
+
         warnings.append(f"--mark「{token}」不是可识别的标记，已忽略")
 
     # ---- 气温轴：量程整体平移（h/c 合并后一次写回） ----
@@ -1063,6 +1074,8 @@ def validate_config(cfg: dict[str, Any]) -> list[str]:
     rain_unit = (cfg["data"].get("rain_unit") or "mm").lower()
     if rain_unit not in ("mm", "inch"):
         raise ConfigError("data.rain_unit 只能是 mm 或 inch")
+    if not isinstance(cfg["data"].get("city_short_name", False), bool):
+        raise ConfigError("data.city_short_name 只能是布尔值（true/false）")
 
     # 4) 表格行
     for key in cfg["table"].get("rows") or []:

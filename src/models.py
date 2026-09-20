@@ -359,6 +359,19 @@ def coord_pair(latitude: Optional[float], longitude: Optional[float],
     return f"{lat}{separator}{lon}"
 
 
+def city_display_name(city: Any, cfg: Optional[dict[str, Any]] = None) -> str:
+    """城市展示名：``data.city_short_name`` 为真时取逗号（半角/全角均可）前第一段，否则完整名称。
+
+    用于标题、文件名、对比图例等展示场景；名称不含逗号时短名与全名一致。返回空串兜底。
+    """
+    name = str(getattr(city, "city_name", "") or "")
+    if cfg and ((cfg.get("data") or {}).get("city_short_name")):
+        for sep in (",", "，"):
+            if sep in name:
+                return name.split(sep, 1)[0].strip()
+    return name
+
+
 # ---- 月份标签 ----------------------------------------------------------
 _ZH_MONTHS_NUM = [f"{i}月" for i in range(1, 13)]
 _ZH_MONTHS_CN = ["一月", "二月", "三月", "四月", "五月", "六月",

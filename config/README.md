@@ -79,6 +79,7 @@ profiles:
 | `month_label_style` | str | `"1月"` | 月份标签：`1月` / `一月` / `Jan` / `01` |
 | `include_annual` | bool | `false` | 表格与图表是否附加年值（温度取月均，降水取累加） |
 | `auto_disable_empty_series` | bool | `true` | 某元素在该城市全无数据时自动不绘制（如纯气温城市自动去掉降水柱） |
+| `city_short_name` | bool | `false` | 城市名取逗号前第一段（如“洛杉矶，加利福尼亚州”→“洛杉矶”）；`false` 使用完整名称。作用于标题、文件名、对比图例、`--list-cities` 与表格标题（半角/全角逗号均可） |
 | `coord.style` | str | `"direction"` | **经纬度显示方式**：`direction` 带方向符号（南纬/西经靠 S/W 区分） / `signed` 纯数字（西经、南纬为**负数**）；也接受中文 `带方向` / `纯数字`。作用于 `{lat}` `{lon}` 占位符与 `--list-cities` 坐标列 |
 | `coord.direction` | str | `"letter"` | 方向符号形式（`coord.style=direction` 时生效）：`letter` = `E`/`W`/`N`/`S`（**默认**） / `hanzi` = `东`/`西`/`南`/`北`；也接受中文 `字母` / `汉字` |
 | `coord.unit` | bool | `true` | 是否带单位 |
