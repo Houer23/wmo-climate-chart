@@ -127,7 +127,10 @@ def setup_style(cfg: dict[str, Any]) -> None:
         if fallback not in families:
             families.append(fallback)
     plt.rcParams["font.sans-serif"] = families
-    plt.rcParams["font.family"] = "sans-serif"
+    # 直接给出字体族**列表**（而不是单一的 "sans-serif"）：matplotlib 3.6+ 只有拿到多字体列表
+    # 才会做逐字符回退，因此这里能让「数字/字母用 Times New Roman、汉字回退宋体」这类混排成立。
+    # 列表里始终包含下面的中文字体兜底，故对既有配置向后兼容。
+    plt.rcParams["font.family"] = families
     plt.rcParams["font.size"] = float(fig_cfg.get("font_size", 11))
     plt.rcParams["font.weight"] = str(fig_cfg.get("font_weight", "normal"))
     plt.rcParams["axes.unicode_minus"] = bool(fig_cfg.get("axes_unicode_minus", True))
