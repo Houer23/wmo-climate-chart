@@ -19,7 +19,12 @@ from matplotlib.text import Text  # noqa: E402
 from matplotlib.ticker import FuncFormatter, MaxNLocator  # noqa: E402
 from matplotlib.transforms import Bbox  # noqa: E402
 
-from .config_loader import compare_metrics, resolve_grid  # noqa: E402
+from .config_loader import (  # noqa: E402
+    BAR_FILL_MODES,
+    STYLE_DIMENSIONS,
+    compare_metrics,
+    resolve_grid,
+)
 from .models import CityClimate, city_display_name, format_coord, normalize_series_key  # noqa: E402
 
 TEMP_KEYS = ("minTemp", "maxTemp", "meanTemp")
@@ -45,7 +50,7 @@ METRIC_SHORT_LABELS = {
 
 # 绘制顺序：柱状类先画（打底），折线/曲线类后画（压在上层）。
 # 图例顺序不受影响，仍按 series.order_in_legend。
-BAR_CHART_TYPES = {"bar", "barh"}
+BAR_CHART_TYPES = {"bar"}
 
 # 极值标注的基准偏移（点）：最高向上、最低向下；自动避让在此基准上按候选序列外推
 EXTREME_LABEL_OFFSETS = {"最高": 16.0, "最低": -22.0}
@@ -629,7 +634,8 @@ def _draw_mean_rain_line(axis_map: dict[str, Any], city: CityClimate,
     if mcfg.get("annotate", True):
         text = str(mcfg.get("annotate_template", "{label} {value:.1f} {unit}")).format(
             label=label, value=mean, unit=_rain_unit_text(city, cfg),
-            city=city.city_name, station=city.station_name or city.city_name,
+            city=city_display_name(city, cfg),
+            station=city.station_name or city_display_name(city, cfg),
         )
         if text.strip():
             anno = target.annotate(
@@ -750,7 +756,84 @@ def _draw_grid(grid_owner, axis_map: dict[str, Any], bottom_key: str,
         bottom.grid(True, axis="x", which=which, **style)
 
 
+def _marker_style(cmpc: dict[str, Any], color: str, index: int = 0) -> dict[str, Any]:
+    """多城市对比里标记的填充 / 轮廓 → ``ax.plot`` 的 marker 颜色参数。
+
+    取值优先级：``markerfacecolor_cycle`` / ``markeredgecolor_cycle``（按 ``index``
+    即城市序号轮换）> ``markerfacecolor`` / ``markeredgecolor``（全局单值）。
+    ``auto`` = 跟随该序列的颜色，``none`` = 透明。
+    """
+    def pick(key: str) -> str:
+        cycle = [item for item in (cmpc.get(f"{key}_cycle") or []) if str(item).strip()]
+        if cycle:
+            return str(cycle[int(index) % len(cycle)]).strip()
+        return str(cmpc.get(key, "auto") or "auto").strip()
+
+    return {
+        "markerfacecolor": _pick(pick("markerfacecolor"), color),
+        "markeredgecolor": _pick(pick("markeredgecolor"), color),
+        "markeredgewidth": float(cmpc.get("markeredgewidth", 1.0) or 0.0),
+    }
+
+
 # ---- 单个元素绘制 ------------------------------------------------------
+
+def _bar_style(scfg: dict[str, Any], color: str, index: int = 0) -> dict[str, Any]:
+    """柱状的填充方式 → ``ax.bar`` 的 facecolor / edgecolor / linewidth / hatch。
+
+    取值优先级：``bar_fill_cycle`` / ``bar_hatch_cycle``（按 ``index`` 轮换，多城市对比用）
+    > ``bar_fill`` / ``bar_hatch``（全局单值）。
+
+    * ``solid``：实心，沿用系列色与透明度；边框按 ``bar_edgecolor`` / ``bar_linewidth``
+      （给了 ``bar_hatch`` 时在实心上叠加纹理，纹理色取边框色）；
+    * ``hollow``：空心只画边框；边框色未指定时退回系列色，线宽未指定时取 1.2，
+      避免"选了空心却什么都看不见"；
+    * ``hatch``：纹理填充；``bar_hatch`` 为空时用 ``/``，纹理色与边框同色；
+      ``bar_fill_color`` / ``bar_fill_color_cycle`` 可给纹理铺一层底色（``none`` = 只画纹理）。
+
+    未知取值按 ``solid`` 处理，保证旧配置与手写配置不会因为拼写问题画不出柱子。
+    """
+    fill_cycle = [item for item in (scfg.get("bar_fill_cycle") or []) if str(item).strip()]
+    hatch_cycle = list(scfg.get("bar_hatch_cycle") or [])
+    if fill_cycle:
+        mode = str(fill_cycle[int(index) % len(fill_cycle)]).lower()
+    else:
+        mode = str(scfg.get("bar_fill", "solid") or "solid").lower()
+    if mode not in BAR_FILL_MODES:
+        mode = "solid"
+    edge = str(scfg.get("bar_edgecolor", "none") or "none").strip()
+    has_edge = edge.lower() not in ("", "none")
+    linewidth = float(scfg.get("bar_linewidth", 0.0) or 0.0)
+    if hatch_cycle:
+        hatch = str(hatch_cycle[int(index) % len(hatch_cycle)] or "")
+    else:
+        hatch = str(scfg.get("bar_hatch", "") or "")
+    # 纹理底色：*_cycle 优先（多城市对比按城市轮换），否则用全局单值；none / 空 = 只画纹理
+    color_cycle = [item for item in (scfg.get("bar_fill_color_cycle") or []) if str(item).strip()]
+    if color_cycle:
+        background = str(color_cycle[int(index) % len(color_cycle)]).strip()
+    else:
+        background = str(scfg.get("bar_fill_color", "none") or "none").strip()
+    has_background = background.lower() not in ("", "none")
+
+    style: dict[str, Any] = {"facecolor": color}
+    if mode == "hollow":
+        style["facecolor"] = "none"
+        style["edgecolor"] = edge if has_edge else color
+        style["linewidth"] = linewidth if linewidth > 0 else 1.2
+    elif mode == "hatch":
+        # 默认不填底色（同色时底色会把纹理吃掉）；给了 bar_fill_color 就先铺底色再叠纹理
+        style["facecolor"] = background if has_background else "none"
+        style["hatch"] = hatch or "/"
+        style["edgecolor"] = edge if has_edge else color
+        style["linewidth"] = linewidth if linewidth > 0 else 1.0
+    else:
+        style["edgecolor"] = edge
+        style["linewidth"] = linewidth
+        if hatch:
+            style["hatch"] = hatch
+    return style
+
 
 def _plot_one(ax, key: str, scfg: dict[str, Any], x: np.ndarray, y: np.ndarray,
               color: str) -> Optional[Line2D]:
@@ -766,15 +849,20 @@ def _plot_one(ax, key: str, scfg: dict[str, Any], x: np.ndarray, y: np.ndarray,
     mew = float(scfg.get("markeredgewidth", 1.0))
     every = max(1, int(scfg.get("markevery", 1) or 1))
     label = str(scfg.get("_label", key))
+    # 标记样式（填充 / 轮廓 / 间隔）：line / step / area / fill_between 共用；
+    # 没配标记时不传任何 marker 参数，保持与旧版完全一致
+    marker_kwargs = dict(
+        marker=marker, markersize=ms, markerfacecolor=mfc, markeredgecolor=mec,
+        markeredgewidth=mew, markevery=every,
+    ) if marker else {}
 
     if chart_type == "bar":
         width = float(scfg.get("bar_width", 0.55))
         bars = ax.bar(
-            x, np.nan_to_num(y, nan=0.0), width=width, color=color, alpha=alpha,
-            edgecolor=str(scfg.get("bar_edgecolor", "none")),
-            linewidth=float(scfg.get("bar_linewidth", 0.0)),
+            x, np.nan_to_num(y, nan=0.0), width=width, alpha=alpha,
             align=str(scfg.get("bar_align", "center")),
             zorder=zorder, label=label,
+            **_bar_style(scfg, color),
         )
         return bars
 
@@ -783,6 +871,12 @@ def _plot_one(ax, key: str, scfg: dict[str, Any], x: np.ndarray, y: np.ndarray,
         line, = ax.plot(xs, ys, color=color, alpha=alpha, linewidth=lw, linestyle=ls,
                         zorder=zorder, label=label)
         if marker:
+            # 让图例句柄也带上标记（线上不额外画点：点位由下面的独立 artist 负责）
+            line.set_marker(marker)
+            line.set_markerfacecolor(mfc)
+            line.set_markeredgecolor(mec)
+            line.set_markeredgewidth(mew)
+            line.set_markevery([])
             ax.plot(x, y, linestyle="none", marker=marker, markersize=ms,
                     markerfacecolor=mfc, markeredgecolor=mec, markeredgewidth=mew,
                     markevery=every, zorder=zorder + 0.1)
@@ -790,20 +884,22 @@ def _plot_one(ax, key: str, scfg: dict[str, Any], x: np.ndarray, y: np.ndarray,
 
     if chart_type == "area":
         line, = ax.plot(x, y, color=color, alpha=alpha, linewidth=lw, linestyle=ls,
-                        zorder=zorder, label=label)
+                        zorder=zorder, label=label, **marker_kwargs)
         ax.fill_between(x, 0, np.nan_to_num(y, nan=0.0), color=color,
                         alpha=float(scfg.get("fill_alpha", 0.18)), zorder=zorder - 0.1)
         return line
 
     if chart_type == "step":
         line, = ax.step(x, y, where="mid", color=color, alpha=alpha,
-                        linewidth=lw, linestyle=ls, zorder=zorder, label=label)
+                        linewidth=lw, linestyle=ls, zorder=zorder, label=label,
+                        **marker_kwargs)
         return line
 
     if chart_type == "scatter":
+        # 散点：填充 / 轮廓 / 轮廓宽各自独立（auto = 跟随配色）
         return ax.scatter(x, y, s=float(scfg.get("markersize", 30)) ** 2 / 6,
-                          color=color, alpha=alpha, marker=_pick(scfg.get("marker"), "o"),
-                          zorder=zorder, label=label, edgecolors=mec)
+                          facecolors=mfc, alpha=alpha, marker=_pick(scfg.get("marker"), "o"),
+                          zorder=zorder, label=label, edgecolors=mec, linewidths=mew)
 
     if chart_type == "fill_between":
         base_key = normalize_series_key(str(scfg.get("fill_between_key", "minTemp")))
@@ -811,19 +907,51 @@ def _plot_one(ax, key: str, scfg: dict[str, Any], x: np.ndarray, y: np.ndarray,
         if base is None:
             base = np.zeros_like(y)
         line, = ax.plot(x, y, color=color, alpha=alpha, linewidth=lw, linestyle=ls,
-                        zorder=zorder, label=label)
+                        zorder=zorder, label=label, **marker_kwargs)
         ax.fill_between(x, base, np.nan_to_num(y, nan=np.nan), color=color,
                         alpha=float(scfg.get("fill_alpha", 0.18)), zorder=zorder - 0.1)
         return line
 
     return ax.plot(x, y, color=color, alpha=alpha, linewidth=lw, linestyle=ls,
-                   marker=marker, markersize=ms, markerfacecolor=mfc,
-                   markeredgecolor=mec, markeredgewidth=mew, markevery=every,
-                   zorder=zorder, label=label)[0]
+                   zorder=zorder, label=label, **marker_kwargs)[0]
+
+
+def _label_step(ax, x: np.ndarray, y: np.ndarray, fmt: str, fontsize: float,
+                bar_width: float) -> int:
+    """柱宽放不下标签时「隔几项标一次」，返回 1 表示每个都标。
+
+    按「字符数 × 字号」估算标签的像素宽度，再用 x 轴的数据跨度 / 绘图区像素宽度
+    换算回数据单位；小于柱宽就不跳过。折线类（``bar_width`` 为 0）永不跳过。
+    """
+    if bar_width <= 0 or len(x) < 2:
+        return 1
+    texts: list[str] = []
+    for value in y:
+        if not np.isfinite(value):
+            continue
+        try:
+            texts.append(fmt.format(value))
+        except (ValueError, IndexError, KeyError):
+            texts.append(f"{value:g}")
+    if not texts:
+        return 1
+    longest = max(len(text) for text in texts)
+    label_px = (longest * 0.6 + 0.4) * fontsize      # 数字约 0.6em/字符
+    x0, x1 = ax.get_xlim()
+    span = abs(float(x1) - float(x0)) or 1.0
+    px_span = max(float(ax.bbox.width), 1.0)
+    label_units = label_px * span / px_span
+    if label_units <= bar_width:
+        return 1
+    step = int(np.ceil(label_units / bar_width))
+    # 至少留 3 个标签，避免密集时只剩一个
+    return max(1, min(step, max(1, len(x) // 3)))
 
 
 def _draw_data_labels(ax, scfg: dict[str, Any], x: np.ndarray, y: np.ndarray,
-                      color: str, axis_scale: float = 1.0) -> None:
+                      color: str, axis_scale: float = 1.0,
+                      bar_width: float = 0.0) -> None:
+    """画数值标签；``bar_width`` > 0（柱状）时会自动隔项，避免同月标签互相压。"""
     dl = scfg.get("data_labels") or {}
     if not dl.get("show"):
         return
@@ -832,8 +960,13 @@ def _draw_data_labels(ax, scfg: dict[str, Any], x: np.ndarray, y: np.ndarray,
     lc = _pick(dl.get("color"), color)
     offset = float(dl.get("offset", 4.0))
     position = str(dl.get("position", "top")).lower()
-    for xi, yi in zip(x, y):
+    fontsize = float(dl.get("fontsize", 8.5))
+    # auto_skip 关闭时不做隔项（每个都标，密集时可能重叠）
+    step = _label_step(ax, x, y, fmt, fontsize, bar_width) if dl.get("auto_skip", True) else 1
+    for index, (xi, yi) in enumerate(zip(x, y)):
         if not np.isfinite(yi):
+            continue
+        if step > 1 and index % step:
             continue
         try:
             text = fmt.format(yi)
@@ -843,7 +976,7 @@ def _draw_data_labels(ax, scfg: dict[str, Any], x: np.ndarray, y: np.ndarray,
         dy = offset if position != "bottom" else -offset
         target.annotate(
             text, xy=(xi, yi), xytext=(0, dy), textcoords="offset points",
-            ha="center", va=va, fontsize=float(dl.get("fontsize", 8.5)),
+            ha="center", va=va, fontsize=fontsize,
             color=lc, rotation=float(dl.get("rotation", 0)), zorder=8,
         )
 
@@ -1324,7 +1457,7 @@ def _draw_city_panel(ax, city: CityClimate, series_list: list[Any],
 def _multi_context(cities: list[CityClimate], cfg: dict[str, Any]) -> dict[str, str]:
     """多图的文本上下文：城市相关占位符用「全部城市名」合成，供署名等模板使用。"""
     context = _context(cities[0], cfg)
-    context["city"] = "、".join(city.city_name for city in cities)
+    context["city"] = "、".join(city_display_name(city, cfg) for city in cities)
     context["city_id"] = ""
     context["city_count"] = str(len(cities))
     return context
@@ -1510,8 +1643,6 @@ def _render_compare_single(cities: list[CityClimate], cfg: dict[str, Any],
 
     colors = list(cmpc.get("colors") or ["#d85a30", "#185fa5"])
     color_map = cmpc.get("color_map") or {}
-    linestyles = list(cmpc.get("linestyle_cycle") or ["-"])
-    markers = list(cmpc.get("marker_cycle") or ["o"])
     chart_type = str(cmpc.get("chart_type", "smooth")).lower()
     array_module = np
 
@@ -1530,47 +1661,49 @@ def _render_compare_single(cities: list[CityClimate], cfg: dict[str, Any],
             color = colors[city.city_id % len(colors)]
         else:
             color = color_map.get(city_display_name(city, cfg)) or colors[i % len(colors)]
-        ls = linestyles[i % len(linestyles)]
-        marker = markers[i % len(markers)]
+        style = _compare_metric_style(cmpc, metric, 0, i)
+        ls = style["linestyle"]
+        marker = style["marker"]
+        marker_style = _marker_style(cmpc, color, i)
         label = str(cmpc.get("label_template", "{city}")).format(city=city_display_name(city, cfg))
         if cmpc.get("show_value_range", False):
             valid = values[np.isfinite(values)]
             if valid.size:
                 label += f"（{valid.min():.1f}~{valid.max():.1f}）"
 
+        offset = 0.0
+        bar_w = 0.0
         if chart_type == "bar":
             total = len(usable)
             width = float(cmpc.get("bar_width", 0.8)) / max(total, 1)
             offset = (i - (total - 1) / 2.0) * width
+            bar_w = width
             handle = ax.bar(x + offset, np.nan_to_num(values, nan=0.0), width=width,
-                            color=color, alpha=float(cmpc.get("alpha", 1.0)),
-                            label=label, zorder=3)
+                            alpha=float(cmpc.get("alpha", 1.0)),
+                            label=label, zorder=3, **_bar_style(cmpc, color, i))
         elif chart_type in ("smooth", "spline"):
             xs, ys = _hermite_smooth(x, values, 240)
             handle, = ax.plot(xs, ys, color=color, alpha=float(cmpc.get("alpha", 1.0)),
                               linewidth=float(cmpc.get("linewidth", 2.2)), linestyle=ls,
                               label=label, zorder=3)
             ax.plot(x, values, linestyle="none", marker=marker,
-                    markersize=float(cmpc.get("markersize", 5.0)), color=color, zorder=3.1)
+                    markersize=float(cmpc.get("markersize", 5.0)), zorder=3.1, **marker_style)
+            # 图例带上标记（线上不额外画点）
+            handle.set_marker(marker)
+            handle.set_markerfacecolor(marker_style["markerfacecolor"])
+            handle.set_markeredgecolor(marker_style["markeredgecolor"])
+            handle.set_markeredgewidth(marker_style["markeredgewidth"])
+            handle.set_markevery([])
         else:
             handle, = ax.plot(x, values, color=color, alpha=float(cmpc.get("alpha", 1.0)),
                               linewidth=float(cmpc.get("linewidth", 2.2)), linestyle=ls,
                               marker=marker, markersize=float(cmpc.get("markersize", 5.0)),
-                              label=label, zorder=3)
+                              label=label, zorder=3, **marker_style)
         handles.append(handle)
 
-        dl = cmpc.get("data_labels") or {}
-        if dl.get("show"):
-            for xi, yi in zip(x, values):
-                if not np.isfinite(yi):
-                    continue
-                try:
-                    text = str(dl.get("format", "{:.1f}")).format(yi)
-                except (ValueError, IndexError, KeyError):
-                    text = f"{yi:g}"
-                ax.annotate(text, xy=(xi, yi), xytext=(0, float(dl.get("offset", 4.0))),
-                            textcoords="offset points", ha="center", va="bottom",
-                            fontsize=float(dl.get("fontsize", 8.0)), color=color, zorder=8)
+        # 标签跟随柱子的实际偏移；柱状密集时自动隔项（折线不跳过）
+        _draw_data_labels(ax, _compare_data_labels(cmpc, metric),
+                          x + offset, values, color, bar_width=bar_w)
 
     # 轴：对比图只用单轴，沿用主轴或副轴配置
     axis_key = "secondary" if metric in RAIN_KEYS else "primary"
@@ -1611,14 +1744,15 @@ def _render_compare_single(cities: list[CityClimate], cfg: dict[str, Any],
     fig_cfg = cfg["figure"]
     title_cfg = dict(fig_cfg.get("title") or {})
     title_cfg["text"] = str(cmpc.get("title_text") or "{metric}对比 · {city}")
-    ax.set_title(
-        str(title_cfg["text"]).format(**context),
-        fontsize=float(title_cfg.get("fontsize", 16)),
-        color=str(title_cfg.get("color", "#2c3e50")),
-        fontweight=str(title_cfg.get("fontweight", "bold")),
-        pad=float(title_cfg.get("pad", 14)),
-        loc=str(title_cfg.get("loc", "center")),
-    )
+    if title_cfg.get("show", True):        # 对比图标题也受 figure.title.show 控制
+        ax.set_title(
+            str(title_cfg["text"]).format(**context),
+            fontsize=float(title_cfg.get("fontsize", 16)),
+            color=str(title_cfg.get("color", "#2c3e50")),
+            fontweight=str(title_cfg.get("fontweight", "bold")),
+            pad=float(title_cfg.get("pad", 14)),
+            loc=str(title_cfg.get("loc", "center")),
+        )
     sub_cfg = fig_cfg.get("subtitle") or {}
     if sub_cfg.get("show"):
         text = str(sub_cfg.get("text", "")).format(**context)
@@ -1728,21 +1862,32 @@ def _compare_label(cmpc: dict[str, Any], cfg: dict[str, Any], city: CityClimate,
 def _plot_compare_series(ax, x: np.ndarray, values: np.ndarray, *, chart_type: str,
                          color: str, linestyle: str, marker: str, alpha: float,
                          linewidth: float, markersize: float, bar_width: float,
-                         offset: float, label: str) -> Any:
+                         offset: float, label: str,
+                         bar_style: Optional[dict[str, Any]] = None,
+                         marker_style: Optional[dict[str, Any]] = None) -> Any:
     """按图形类型画一条「城市 × 元素」序列，返回图例句柄。"""
     if chart_type in BAR_CHART_TYPES:
         return ax.bar(x + offset, np.nan_to_num(values, nan=0.0), width=bar_width,
-                      color=color, alpha=alpha, label=label, zorder=3)
+                      alpha=alpha, label=label, zorder=3,
+                      **dict(bar_style or {"facecolor": color}))
+    mstyle = dict(marker_style or {})
     if chart_type in ("smooth", "spline"):
         xs, ys = _hermite_smooth(x, values, 240)
         handle, = ax.plot(xs, ys, color=color, alpha=alpha, linewidth=linewidth,
                           linestyle=linestyle, label=label, zorder=3)
         ax.plot(x, values, linestyle="none", marker=marker,
-                markersize=markersize, color=color, zorder=3.1)
+                markersize=markersize, zorder=3.1, **mstyle)
+        # 图例带上标记（线上不额外画点）
+        handle.set_marker(marker)
+        if mstyle:
+            handle.set_markerfacecolor(mstyle.get("markerfacecolor", color))
+            handle.set_markeredgecolor(mstyle.get("markeredgecolor", color))
+            handle.set_markeredgewidth(mstyle.get("markeredgewidth", 1.0))
+        handle.set_markevery([])
         return handle
     handle, = ax.plot(x, values, color=color, alpha=alpha, linewidth=linewidth,
                       linestyle=linestyle, marker=marker, markersize=markersize,
-                      label=label, zorder=3)
+                      label=label, zorder=3, **mstyle)
     return handle
 
 
@@ -1882,15 +2027,29 @@ def _compare_sort_metric(cmpc: dict[str, Any], metrics: list[str]) -> str:
     return key if key in metrics else metrics[0]
 
 
-def _compare_metric_style(cmpc: dict[str, Any], metric: str, index: int) -> dict[str, str]:
-    """``overlay`` 下单个元素的样式。
+def _compare_metric_style(cmpc: dict[str, Any], metric: str, index: int,
+                          city_index: Optional[int] = None) -> dict[str, str]:
+    """多城市对比里「城市 × 元素」一条序列的样式。
 
-    ``element_styles.<元素>`` 优先；没写 ``chart_type`` 时跟随 ``compare.chart_type``——
-    而 ``compare.chart_type`` 仍是默认的 ``smooth`` 时，降水类元素默认画柱（气候图习惯）。
+    ``compare.style_dimension`` 决定「线型 / 标记」按哪个维度轮换：
+
+    * ``city``（默认）：线型、标记都按**城市**轮换——颜色统一（如全黑）时靠样式区分城市；
+    * ``metric``：按**元素**轮换（旧行为），``element_styles`` 的 linestyle / marker 生效；
+    * ``hybrid``：线型按城市、标记按元素。
+
+    图形类型始终「元素级优先」：``element_styles.<元素>.chart_type`` > ``compare.chart_type``，
+    且 ``compare.chart_type`` 仍是默认 ``smooth`` 时降水类元素默认画柱（气候图习惯）。
+    ``index`` 是元素序号，``city_index`` 是城市序号（缺省时退回 ``index``）。
     """
     raw = dict(((cmpc.get("element_styles") or {}).get(metric) or {}))
     linestyles = list(cmpc.get("linestyle_cycle") or ["-"])
     markers = list(cmpc.get("marker_cycle") or ["o"])
+    dimension = str(cmpc.get("style_dimension", "city") or "city").lower()
+    if dimension not in STYLE_DIMENSIONS:
+        dimension = "city"
+    element_at = int(index)
+    city_at = element_at if city_index is None else int(city_index)
+
     global_type = str(cmpc.get("chart_type", "smooth")).lower()
     if raw.get("chart_type"):
         chart_type = str(raw["chart_type"]).lower()
@@ -1898,11 +2057,40 @@ def _compare_metric_style(cmpc: dict[str, Any], metric: str, index: int) -> dict
         chart_type = global_type
     else:
         chart_type = "bar" if metric in RAIN_KEYS else global_type
-    return {
-        "chart_type": chart_type,
-        "linestyle": str(raw.get("linestyle") or linestyles[index % len(linestyles)]),
-        "marker": str(raw.get("marker") or markers[index % len(markers)]),
-    }
+
+    # 线型：city / hybrid 按城市轮换；metric 用元素级值，缺省按元素轮换
+    if dimension in ("city", "hybrid"):
+        linestyle = str(linestyles[city_at % len(linestyles)])
+    else:
+        linestyle = str(raw.get("linestyle") or linestyles[element_at % len(linestyles)])
+    # 标记：city 按城市轮换；metric / hybrid 用元素级值（含「不显示」的空串），缺省按元素轮换
+    if dimension == "city":
+        marker = str(markers[city_at % len(markers)])
+    else:
+        element_marker = raw.get("marker")
+        marker = (str(element_marker) if element_marker is not None
+                  else str(markers[element_at % len(markers)]))
+    return {"chart_type": chart_type, "linestyle": linestyle, "marker": marker}
+
+
+def _compare_data_labels(cmpc: dict[str, Any], metric: str) -> dict[str, Any]:
+    """对比图的数值标签配置：全局 ``compare.data_labels`` + 该元素的覆盖（**元素级优先**）。
+
+    元素级覆盖写在 ``compare.element_styles.<元素>.data_labels``：
+    ``show`` / ``fontsize`` / ``offset`` 为 ``None``、``format`` 为空串时表示「跟随全局」。
+    """
+    base = dict(cmpc.get("data_labels") or {})
+    element = (cmpc.get("element_styles") or {}).get(metric) or {}
+    override = element.get("data_labels") or {}
+    if override.get("show") is not None:
+        base["show"] = bool(override["show"])
+    if override.get("fontsize") not in (None, ""):
+        base["fontsize"] = float(override["fontsize"])
+    if str(override.get("format") or "").strip():
+        base["format"] = str(override["format"])
+    if override.get("offset") not in (None, ""):
+        base["offset"] = float(override["offset"])
+    return {"data_labels": base}
 
 
 # ---- 方案 A：多元素同图叠加 --------------------------------------------
@@ -1920,8 +2108,10 @@ def _render_compare_overlay(cities: list[CityClimate], cfg: dict[str, Any],
     markersize = float(cmpc.get("markersize", 5.0))
     bar_width = float(cmpc.get("bar_width", 0.8))
     colors = _compare_colors(ordered, cfg)
-    styles = {metric: _compare_metric_style(cmpc, metric, index)
-              for index, metric in enumerate(metrics)}
+    dimension = str(cmpc.get("style_dimension", "city") or "city").lower()
+    if dimension not in STYLE_DIMENSIONS:
+        dimension = "city"
+    bar_by_city = dimension in ("city", "hybrid")
 
     setup_style(cfg)
     fig_cfg = cfg["figure"]
@@ -1955,13 +2145,16 @@ def _render_compare_overlay(cities: list[CityClimate], cfg: dict[str, Any],
     # 序列按「城市 → 元素」收集，图例也按这个顺序（便于按城市/元素重排）
     items: list[dict[str, Any]] = []
     for city_index, city in enumerate(ordered):
-        for metric in metrics:
+        for metric_index, metric in enumerate(metrics):
             items.append({
                 "city": city, "metric": metric,
                 "values": _compare_values(city, cfg, metric),
                 "color": colors[city_index],
                 "axis": _metric_axis_key(metric),
-                "style": styles[metric],
+                "style": _compare_metric_style(cmpc, metric, metric_index, city_index),
+                # 柱样式按 style_dimension 取序号：city/hybrid 按城市，metric 按元素
+                "bar_index": city_index if bar_by_city else metric_index,
+                "city_index": city_index,
             })
 
     # 柱宽按**全图**柱状序列数均分：主副轴都画柱时也并排而不是互相压住
@@ -1975,7 +2168,6 @@ def _render_compare_overlay(cities: list[CityClimate], cfg: dict[str, Any],
     bottom_key = _stack_axes(cfg, axis_map, by_axis)   # 折线轴在上、柱状轴在下（含底色归属）
 
     handles: list[Any] = [None] * len(items)
-    label_cfg = {"data_labels": cmpc.get("data_labels")}
     for item in sorted(items,
                        key=lambda it: 0 if it["style"]["chart_type"] in BAR_CHART_TYPES else 1):
         target = axis_map.get(item["axis"])
@@ -1997,8 +2189,14 @@ def _render_compare_overlay(cities: list[CityClimate], cfg: dict[str, Any],
             target, x, item["values"], chart_type=item["style"]["chart_type"],
             color=item["color"], linestyle=item["style"]["linestyle"],
             marker=item["style"]["marker"], alpha=alpha, linewidth=linewidth,
-            markersize=markersize, bar_width=width, offset=offset, label=label)
-        _draw_data_labels(target, label_cfg, x, item["values"], item["color"])
+            markersize=markersize, bar_width=width, offset=offset, label=label,
+            bar_style=_bar_style(cmpc, item["color"], item["bar_index"]),
+            marker_style=_marker_style(cmpc, item["color"], item["city_index"]))
+        # 每条序列按自己的元素取标签配置（元素级可单独开关 / 调格式）；
+        # 标签跟随柱子的实际偏移，柱状密集时自动隔项
+        _draw_data_labels(target, _compare_data_labels(cmpc, item["metric"]),
+                          x + offset, item["values"], item["color"],
+                          bar_width=width if is_bar else 0.0)
 
     axis_defaults = {"primary": (-0.075, "axes_primary"),
                      "secondary": (1.075, "axes_secondary"),
@@ -2045,23 +2243,26 @@ def _render_compare_overlay(cities: list[CityClimate], cfg: dict[str, Any],
             sub_text = str(sub_cfg.get("text", "")).format(**context)
         except (KeyError, IndexError, ValueError):
             sub_text = str(sub_cfg.get("text", ""))
+    show_title = bool(title_cfg.get("show", True))
     if title_in_figure:
-        fig.suptitle(title, fontsize=float(title_cfg.get("fontsize", 16)),
-                     color=str(title_cfg.get("color", "#2c3e50")),
-                     fontweight=str(title_cfg.get("fontweight", "bold")), y=0.985)
+        if show_title:
+            fig.suptitle(title, fontsize=float(title_cfg.get("fontsize", 16)),
+                         color=str(title_cfg.get("color", "#2c3e50")),
+                         fontweight=str(title_cfg.get("fontweight", "bold")), y=0.985)
         if sub_text.strip():
             fig.text(0.5, 0.935, sub_text, ha="center", va="top",
                      fontsize=float(sub_cfg.get("fontsize", 10.5)),
                      color=str(sub_cfg.get("color", "#596679")))
     else:
-        ax.set_title(
-            title,
-            fontsize=float(title_cfg.get("fontsize", 16)),
-            color=str(title_cfg.get("color", "#2c3e50")),
-            fontweight=str(title_cfg.get("fontweight", "bold")),
-            pad=float(title_cfg.get("pad", 14)),
-            loc=str(title_cfg.get("loc", "center")),
-        )
+        if show_title:
+            ax.set_title(
+                title,
+                fontsize=float(title_cfg.get("fontsize", 16)),
+                color=str(title_cfg.get("color", "#2c3e50")),
+                fontweight=str(title_cfg.get("fontweight", "bold")),
+                pad=float(title_cfg.get("pad", 14)),
+                loc=str(title_cfg.get("loc", "center")),
+            )
         if sub_text.strip():
             ax.text(0.5, 1.0, sub_text, transform=ax.transAxes, ha="center", va="bottom",
                     fontsize=float(sub_cfg.get("fontsize", 10.5)),
@@ -2096,15 +2297,18 @@ def _draw_compare_metric_panel(ax, cities: list[CityClimate], cfg: dict[str, Any
     由 :func:`_render_compare_facet` 预先算好，便于横向比较同行各格。
     """
     cmpc = cfg.get("compare") or {}
-    chart_type = str(cmpc.get("chart_type", "smooth")).lower()
+    # 一格一元素：图形类型用该元素自己的样式（element_styles.chart_type 优先于 compare.chart_type）
+    chart_type = _compare_metric_style(cmpc, metric, 0, 0)["chart_type"]
     alpha = float(cmpc.get("alpha", 1.0))
     linewidth = float(cmpc.get("linewidth", 2.2))
     markersize = float(cmpc.get("markersize", 5.0))
     bar_width = float(cmpc.get("bar_width", 0.8))
     colors = _compare_colors(cities, cfg)
-    linestyles = list(cmpc.get("linestyle_cycle") or ["-"])
-    markers = list(cmpc.get("marker_cycle") or ["o"])
-    label_cfg = {"data_labels": cmpc.get("data_labels")}
+    dimension = str(cmpc.get("style_dimension", "city") or "city").lower()
+    if dimension not in STYLE_DIMENSIONS:
+        dimension = "city"
+    bar_by_city = dimension in ("city", "hybrid")
+    label_cfg = _compare_data_labels(cmpc, metric)
     x = _configure_x_axis(ax, cities[0], cfg)
     total = max(len(cities), 1)
     width = bar_width / total
@@ -2116,15 +2320,21 @@ def _draw_compare_metric_panel(ax, cities: list[CityClimate], cfg: dict[str, Any
         label = _compare_label(cmpc, cfg, city, METRIC_SHORT_LABELS.get(metric, metric),
                                values, multiple=False)
         offset = ((index - (total - 1) / 2.0) * width) if chart_type in BAR_CHART_TYPES else 0.0
+        style = _compare_metric_style(cmpc, metric, 0, index)
         handles.append(_plot_compare_series(
             ax, x, values, chart_type=chart_type, color=colors[index],
-            linestyle=linestyles[index % len(linestyles)], marker=markers[index % len(markers)],
+            linestyle=style["linestyle"], marker=style["marker"],
             alpha=alpha, linewidth=linewidth, markersize=markersize,
-            bar_width=width, offset=offset, label=label))
-        _draw_data_labels(ax, label_cfg, x, values, colors[index])
+            bar_width=width, offset=offset, label=label,
+            bar_style=_bar_style(cmpc, colors[index], index if bar_by_city else 0),
+            marker_style=_marker_style(cmpc, colors[index], index)))
+        _draw_data_labels(ax, label_cfg, x + offset, values, colors[index],
+                          bar_width=width if chart_type in BAR_CHART_TYPES else 0.0)
 
     axis_key = _metric_axis_key(metric)
-    ax_cfg = dict(cfg["axes_secondary" if axis_key == "secondary" else "axes_primary"])
+    axis_cfg_key = {"primary": "axes_primary", "secondary": "axes_secondary",
+                    "tertiary": "axes_tertiary"}[axis_key]
+    ax_cfg = dict(cfg[axis_cfg_key])
     ax_cfg["side"] = "left"
     # 一格只画一个元素，纵轴标题直接用「元素名 (单位)」，避免复用「降水 (毫米)」这类泛指
     ax_cfg["label_text"] = _metric_axis_label(metric, cfg, cities[0] if cities else None)
@@ -2232,9 +2442,10 @@ def _render_compare_facet(cities: list[CityClimate], cfg: dict[str, Any],
         fig_title = title_text.format(**context)
     except (KeyError, IndexError, ValueError):
         fig_title = title_text
-    fig.suptitle(fig_title, fontsize=float(title_cfg.get("fontsize", 16)),
-                 color=str(title_cfg.get("color", "#2c3e50")),
-                 fontweight=str(title_cfg.get("fontweight", "bold")), y=0.985)
+    if title_cfg.get("show", True):
+        fig.suptitle(fig_title, fontsize=float(title_cfg.get("fontsize", 16)),
+                     color=str(title_cfg.get("color", "#2c3e50")),
+                     fontweight=str(title_cfg.get("fontweight", "bold")), y=0.985)
     sub_cfg = fig_cfg.get("subtitle") or {}
     has_subtitle = False
     if sub_cfg.get("show"):

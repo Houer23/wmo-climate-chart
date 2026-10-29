@@ -172,7 +172,7 @@ def compare_basename(cfg: dict[str, Any], cities: list[CityClimate]) -> str:
     metric = metrics[0]
     if len(metrics) > 1 and "{metrics}" not in template:
         metric = "-".join(metrics) + ("_overlay" if mode == "overlay" else "")
-    names = "_".join(c.city_name for c in cities[:4]) or "compare"
+    names = "_".join(city_display_name(c, cfg) for c in cities[:4]) or "compare"
     return _safe(template.format(
         city_count=len(cities), metric=metric, metrics="-".join(metrics), mode=mode,
         cities=names, profile=cfg.get("profile_name", ""),
@@ -182,7 +182,7 @@ def compare_basename(cfg: dict[str, Any], cities: list[CityClimate]) -> str:
 def multi_basename(cfg: dict[str, Any], cities: list[CityClimate], grid: str) -> str:
     """多图文件名主干。占位符：``{city_count}`` / ``{cities}`` / ``{grid}`` / ``{profile}``。"""
     template = cfg["output"].get("multi_name_template", "{city_count}城多图_{grid}_{profile}")
-    names = "_".join(city.city_name for city in cities[:4]) or "multi"
+    names = "_".join(city_display_name(city, cfg) for city in cities[:4]) or "multi"
     return _safe(template.format(
         city_count=len(cities), cities=names, grid=grid,
         profile=cfg.get("profile_name", ""),

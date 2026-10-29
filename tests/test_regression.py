@@ -1293,6 +1293,164 @@ def test_compare_multi_metrics() -> None:
           str(report_one.get("mode")))
 
 
+# ======================= 4a-3. 柱填充 / 标记轮廓 / 标签 =======================
+
+def test_bar_fill_and_marker_styles() -> None:
+    """柱状三种填充（solid/hollow/hatch + 底色 + 按城市轮换）与标记填充/轮廓。"""
+    from matplotlib import pyplot as plt
+
+    from src.chart import _bar_style, _marker_style
+
+    color = "#123456"
+    solid = _bar_style({"bar_fill": "solid"}, color)
+    check("bar_fill=solid 用元素色实心", solid["facecolor"] == color, str(solid))
+
+    hollow = _bar_style({"bar_fill": "hollow"}, color)
+    check("bar_fill=hollow 不填色", hollow["facecolor"] == "none", str(hollow))
+    check("bar_fill=hollow 边框退回元素色", hollow["edgecolor"] == color, str(hollow))
+    check("bar_fill=hollow 线宽自动取 1.2", hollow["linewidth"] == 1.2, str(hollow))
+
+    hatch = _bar_style({"bar_fill": "hatch"}, color)
+    check("bar_fill=hatch 默认纹理 '/'", hatch.get("hatch") == "/", str(hatch))
+    check("bar_fill=hatch 默认不铺底色", hatch["facecolor"] == "none", str(hatch))
+
+    tinted = _bar_style({"bar_fill": "hatch", "bar_hatch": "///",
+                         "bar_fill_color": "#dbe6f0"}, color)
+    check("bar_hatch 生效", tinted.get("hatch") == "///", str(tinted))
+    check("bar_fill_color 铺底色", tinted["facecolor"] == "#dbe6f0", str(tinted))
+
+    cycle = _bar_style({"bar_fill_cycle": ["solid", "hollow"], "bar_fill": "solid"}, color, 1)
+    check("bar_fill_cycle 按序号轮换", cycle["facecolor"] == "none", str(cycle))
+    unknown = _bar_style({"bar_fill": "不存在的值"}, color)
+    check("未知 bar_fill 退回 solid", unknown["facecolor"] == color, str(unknown))
+
+    auto = _marker_style({}, color, 0)
+    check("标记填充 auto 跟随元素色", auto["markerfacecolor"] == color, str(auto))
+    fixed = _marker_style({"markerfacecolor": "#ffffff", "markeredgecolor": "#000000",
+                           "markeredgewidth": 1.5}, color, 0)
+    check("标记填充/轮廓/线宽生效",
+          (fixed["markerfacecolor"], fixed["markeredgecolor"], fixed["markeredgewidth"])
+          == ("#ffffff", "#000000", 1.5), str(fixed))
+    cyc = _marker_style({"markerfacecolor_cycle": ["#ffffff", "#000000"]}, color, 1)
+    check("markerfacecolor_cycle 按城市轮换", cyc["markerfacecolor"] == "#000000", str(cyc))
+
+    # 落到实际柱子上
+    cfg = load_config("default", None, [("series.rainfall.bar_fill", "hatch"),
+                                       ("series.rainfall.bar_hatch", "///")])
+    fig = _render_figure(cfg, city(237))
+    bars = [patch for ax in fig.axes for patch in ax.patches]
+    check("单图纹理柱已生效", any(patch.get_hatch() == "///" for patch in bars),
+          str({patch.get_hatch() for patch in bars}))
+    plt.close(fig)
+
+
+def test_compare_label_and_style_options() -> None:
+    """对比图：柱标签跟随柱子、自动隔项开关、元素级标签、样式维度、标题开关、城市名统一。"""
+    import numpy as np
+
+    from src.chart import _compare_metric_style, _label_step
+    from src.pipeline import compare_basename
+
+    cities = [city(237), city(1), city(156)]
+    out_dir = VERIFY_DIR / "多元素对比"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # ---- 柱宽放不下时自动隔项 ----
+    cfg_bar = load_config("compare", None, [
+        ("compare.chart_type", "bar"),
+        ("compare.data_labels.show", True),
+        ("compare.data_labels.fontsize", 9),
+    ])
+    fig_wide, _ = _compare_figure(cfg_bar, cities)
+    fig_wide.canvas.draw()
+    ax_wide = fig_wide.axes[0]
+    xs = np.arange(1, 13, dtype=float)
+    ys = np.full(12, 25.0)
+    check("柱够宽时不隔项", _label_step(ax_wide, xs, ys, "{:.0f}", 9, 0.6) == 1,
+          str(_label_step(ax_wide, xs, ys, "{:.0f}", 9, 0.6)))
+    check("柱过窄时隔项", _label_step(ax_wide, xs, ys, "{:.1f}", 9, 0.02) > 1,
+          str(_label_step(ax_wide, xs, ys, "{:.1f}", 9, 0.02)))
+
+    # ---- 柱标签跟随柱子偏移：不同城市的标签 x 不同 ----
+    def _annotations(fig) -> list:
+        """所有坐标轴上的数值标签（Annotation 才有 xy；署名是普通 Text，需排除）。"""
+        return [t for ax in fig.axes for t in ax.texts if hasattr(t, "xy")]
+
+    fig_cmp, _report_cmp = _compare_figure(cfg_bar, cities)
+    annos = _annotations(fig_cmp)
+    xs_used = {round(float(a.xy[0]), 2) for a in annos}
+    check("柱标签数量与柱子一致", len(annos) == len(cities) * 12,
+          f"{len(annos)} vs {len(cities) * 12}")
+    check("同月各城标签 x 不再重叠", len(xs_used) >= len(cities), str(sorted(xs_used)[:6]))
+
+    # ---- auto_skip 关闭后标签变多 ----
+    cfg_noskip = load_config("compare", None, [
+        ("compare.chart_type", "bar"),
+        ("compare.data_labels.show", True),
+        ("compare.data_labels.fontsize", 14),     # 字号大 → 默认会隔项
+        ("compare.data_labels.auto_skip", False),
+    ])
+    fig_noskip, _ = _compare_figure(cfg_noskip, cities)
+    check("auto_skip 关闭后标签不被跳过", len(_annotations(fig_noskip)) == len(cities) * 12,
+          str(len(_annotations(fig_noskip))))
+
+    # ---- 元素级数值标签（降水在副轴上，标签也落在副轴）----
+    cfg_elem = load_config("compare", None, [
+        ("compare.metrics", ["minTemp", "rainfall"]),
+        ("compare.mode", "overlay"),
+        ("compare.data_labels.show", False),
+        ("compare.element_styles.rainfall.data_labels.show", True),
+    ])
+    fig_elem, _ = _compare_figure(cfg_elem, cities)
+    check("元素级标签只给指定元素画（降水 3 城 × 12 月）",
+          len(_annotations(fig_elem)) == len(cities) * 12, str(len(_annotations(fig_elem))))
+
+    # ---- style_dimension ----
+    cmpc = {"linestyle_cycle": ["-", "--"], "marker_cycle": ["o", "s"],
+            "style_dimension": "city"}
+    check("style_dimension=city：线型按城市轮换",
+          _compare_metric_style(cmpc, "minTemp", 0, 1)["linestyle"] == "--",
+          str(_compare_metric_style(cmpc, "minTemp", 0, 1)))
+    cmpc_metric = dict(cmpc, style_dimension="metric")
+    check("style_dimension=metric：同元素不同城市线型相同",
+          _compare_metric_style(cmpc_metric, "minTemp", 1, 0)["linestyle"]
+          == _compare_metric_style(cmpc_metric, "minTemp", 1, 2)["linestyle"])
+    cmpc_hybrid = dict(cmpc, style_dimension="hybrid")
+    check("style_dimension=hybrid：线型按城市、标记按元素",
+          _compare_metric_style(cmpc_hybrid, "maxTemp", 1, 0)["linestyle"] == "-"
+          and _compare_metric_style(cmpc_hybrid, "maxTemp", 1, 0)["marker"] == "s",
+          str(_compare_metric_style(cmpc_hybrid, "maxTemp", 1, 0)))
+
+    # ---- 标题受 figure.title.show 控制 ----
+    cfg_notitle = load_config("compare", None, [("figure.title.show", False)])
+    fig_notitle, _ = _compare_figure(cfg_notitle, cities)
+    check("对比图标题可关闭", fig_notitle.axes[0].get_title() == "",
+          repr(fig_notitle.axes[0].get_title()))
+
+    # ---- 城市名统一：短名同时作用于图例与文件名 ----
+    cfg_short = load_config(None, None, [("data.city_short_name", True)])
+    full_name = city(1).city_name
+    short_name = compare_basename(cfg_short, [city(1)])
+    check("文件名用短名（与图例一致）",
+          full_name not in short_name or "," not in full_name, short_name)
+
+    # ---- 校验 ----
+    for overrides, note in (
+        ([("compare.bar_fill", "xxx")], "bar_fill 非法"),
+        ([("compare.style_dimension", "xxx")], "style_dimension 非法"),
+        ([("compare.bar_fill_cycle", "solid")], "bar_fill_cycle 不是数组"),
+        ([("compare.bar_fill_cycle", ["solid", "xxx"])], "bar_fill_cycle 含非法值"),
+        ([("series.rainfall.bar_fill", "xxx")], "series.bar_fill 非法"),
+        ([("compare.bar_hatch_cycle", "x")], "bar_hatch_cycle 不是数组"),
+    ):
+        try:
+            validate_config(load_config("compare", None, overrides))
+        except ConfigError:
+            check(f"柱样式校验：{note}时报错", True)
+        else:
+            check(f"柱样式校验：{note}时报错", False, "未报错")
+
+
 # ======================= 4b. 多图（多城市同画布） =======================
 
 def test_parse_grid() -> None:
@@ -2086,6 +2244,8 @@ def main() -> int:
     run("绘图层：极值标注窄空间避让", test_extremes_label_avoidance_cramped_axis)
     run("绘图层：多城市对比", test_compare_render)
     run("绘图层：多元素对比（分面/叠加/图例）", test_compare_multi_metrics)
+    run("绘图层：柱填充与标记轮廓", test_bar_fill_and_marker_styles)
+    run("绘图层：对比图标签/样式/标题", test_compare_label_and_style_options)
     run("绘图层：多图排列解析", test_parse_grid)
     run("绘图层：多图（多城市同画布）", test_multi_city_chart)
     run("编排层：多图告警与落盘", lambda: test_run_multi_offline(tmp))

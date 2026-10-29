@@ -287,7 +287,10 @@ profiles:
 | `markeredgewidth` | float | `1.0` | 标记边宽 |
 | `markevery` | int | `1` | 每隔 N 个点显示一个标记 |
 | `bar_width` | float | `0.55` | 柱宽（`bar` 专有） |
-| `bar_edgecolor` / `bar_linewidth` | — | `"none"` / `0.0` | 柱边线 |
+| `bar_fill` | str | `"solid"` | 柱填充：`solid` 实心 / `hollow` 空心（仅边框）/ `hatch` 纹理填充 |
+| `bar_hatch` | str | `""` | 纹理样式（`/` `\` `|` `-` `+` `x` `o` `.` `*`，重复可加密）；空 = `/`。`solid` 下给值会在实心上叠纹理 |
+| `bar_fill_color` | color/`none` | `"none"` | 纹理模式底色：`none` = 只画纹理（默认），给颜色则先铺底色再叠纹理 |
+| `bar_edgecolor` / `bar_linewidth` | — | `"none"` / `0.0` | 柱边线（`hollow` 未指定时自动用元素色 + 1.2 线宽） |
 | `bar_align` | str | `"center"` | 柱对齐 `center`/`edge` |
 | `smooth_points` | int | `240` | 平滑曲线插值点数（`smooth` 专有，自实现三次 Hermite 插值） |
 | `fill_alpha` | float | `0.18` | 面积图/区间带透明度 |
@@ -357,13 +360,23 @@ profiles:
 | `color_map` | obj | `{}` | 显式指定「城市名 → 颜色」，优先于 `colors` |
 | `color_by` | str | `"order"` | `order` 按传入顺序 / `city_id` 按编号取色 |
 | `linestyle_cycle` / `marker_cycle` | array | 4 种 / 8 种 | 线型与标记循环 |
+| `style_dimension` | str | `"city"` | 线型/标记/柱填充按谁轮换：`city` 按城市 / `metric` 按元素 / `hybrid` 线型按城市、标记按元素 |
 | `linewidth` / `markersize` / `alpha` | — | `2.2` / `5.0` / `1.0` | 线条样式 |
+| `markerfacecolor` / `markeredgecolor` | color/`auto` | `"auto"` | 标记填充 / 轮廓；`auto` = 跟随城市色，`none` = 透明 |
+| `markeredgewidth` | float | `1.0` | 标记轮廓线宽（`0` = 无轮廓） |
+| `markerfacecolor_cycle` / `markeredgecolor_cycle` | array | `[]` | 按城市轮换的标记填充 / 轮廓（非空时覆盖上面的单值） |
 | `bar_width` | float | `0.8` | 柱状模式总柱宽（内部按城市/元素数均分） |
+| `bar_fill` / `bar_hatch` | str | `"solid"` / `""` | 对比柱填充方式与纹理（同 `series.*`） |
+| `bar_fill_cycle` / `bar_hatch_cycle` | array | `["solid"]` / `[]` | 按城市轮换的填充方式 / 纹理（如全同色时靠实心/空心/纹理区分城市） |
+| `bar_fill_color` / `bar_fill_color_cycle` | color/`none` | `"none"` / `[]` | 纹理底色（全局 / 按城市轮换） |
+| `bar_edgecolor` / `bar_linewidth` | — | `"none"` / `0.0` | 对比柱边框（`hollow` 下自动补色与 1.2 线宽） |
 | `sort_by` | str | `"value_desc"` | `none` / `value_desc` / `value_asc` / `name` / `city_id` |
 | `show_value_range` | bool | `true` | 图例中附加该城市的数值范围 |
 | `label_template` | str 模板 | `"{city}"` | 图例名模板；多元素时可用 `{metric}`（未写则自动补「· 元素名」） |
 | `legend_ncol` | int | `0` | 图例列数（旧键，`legend.ncol` 优先）；`0` 自动 |
-| `data_labels.show` / `.fontsize` / `.format` / `.offset` | — | `false` / `8.0` / `"{:.1f}"` / `4.0` | 对比图数值标签 |
+| `data_labels.show` / `.fontsize` / `.format` / `.offset` | — | `false` / `8.0` / `"{:.1f}"` / `4.0` | 对比图数值标签（全局默认） |
+| `data_labels.auto_skip` | bool | `true` | 柱宽放不下标签时自动隔项（关掉则每个点都标） |
+| `element_styles.<元素>.data_labels.show` / `.fontsize` / `.format` / `.offset` | — | `null`/`null`/`""`/`null` | 元素级数值标签覆盖，**元素级优先**，留空跟随全局 |
 
 ## J. `multi` — 多图（多城市同画布）
 

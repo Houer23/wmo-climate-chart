@@ -76,6 +76,9 @@ def _series(**overrides: Any) -> dict[str, Any]:
         "markevery": 1,
         # ---- 柱状专有 ----
         "bar_width": 0.55,
+        "bar_fill": "solid",         # solid 实心 | hollow 空心（仅边框）| hatch 纹理填充
+        "bar_hatch": "",             # 纹理样式（matplotlib hatch，如 "/" "//" "x" "o"）；空 = "/"
+        "bar_fill_color": "none",    # 纹理模式的底色：none = 只画纹理（默认）
         "bar_edgecolor": "none",
         "bar_linewidth": 0.0,
         "bar_align": "center",
@@ -137,6 +140,14 @@ SERIES_DEFAULTS: dict[str, dict[str, Any]] = {
 COMPARE_METRIC_KEYS: tuple[str, ...] = ("minTemp", "maxTemp", "meanTemp", "rainfall", "raindays")
 #: 一次最多对比的元素个数（再多格子/线条就看不清了）
 COMPARE_METRICS_MAX = 4
+#: 柱状填充方式
+BAR_FILL_MODES: tuple[str, ...] = ("solid", "hollow", "hatch")
+#: 线型/标记/柱样式的轮换维度（多城市对比）
+STYLE_DIMENSIONS: tuple[str, ...] = ("city", "metric", "hybrid")
+#: 元素级数值标签的默认值：None / 空串 = 跟随 compare.data_labels（全局）
+ELEMENT_LABEL_DEFAULTS: dict[str, Any] = {
+    "show": None, "fontsize": None, "format": "", "offset": None,
+}
 
 
 DEFAULTS: dict[str, Any] = {
@@ -519,8 +530,22 @@ DEFAULTS: dict[str, Any] = {
         "marker_cycle": ["o", "s", "^", "D", "v", "P", "X", "*"],
         "linewidth": 2.2,
         "markersize": 5.0,
+        "markerfacecolor": "auto",          # 标记填充：auto = 跟随城市色，none = 透明
+        "markeredgecolor": "auto",          # 标记轮廓：auto = 跟随城市色
+        "markeredgewidth": 1.0,             # 标记轮廓线宽（0 = 无轮廓）
+        "markerfacecolor_cycle": [],        # 按城市轮换的标记填充（非空时覆盖）
+        "markeredgecolor_cycle": [],        # 按城市轮换的标记轮廓（非空时覆盖）
         "alpha": 1.0,
         "bar_width": 0.8,
+        "bar_fill": "solid",                # 柱状对比时的填充方式：solid | hollow | hatch
+        "bar_hatch": "",                    # 纹理样式；空 = "/"
+        "bar_fill_cycle": ["solid"],        # 按城市轮换的填充方式（非空时覆盖 bar_fill）
+        "bar_hatch_cycle": [],              # 按城市轮换的纹理样式（非空时覆盖 bar_hatch）
+        "bar_fill_color": "none",           # 纹理模式的底色（全局兜底）：none = 只画纹理
+        "bar_fill_color_cycle": [],         # 按城市轮换的纹理底色（非空时覆盖 bar_fill_color）
+        "style_dimension": "city",          # 线型/标记/柱样式按谁轮换：city（默认）| metric | hybrid
+        "bar_edgecolor": "none",            # 柱边框色（solid 时也可用来勾边）
+        "bar_linewidth": 0.0,               # 柱边框线宽；hollow 下留 0 会自动取 1.2
         "sort_by": "value_desc",            # none | value_desc | value_asc | name | city_id
         "show_value_range": True,           # 图例中显示该城市该元素的范围
         "label_template": "{city}",
@@ -528,11 +553,16 @@ DEFAULTS: dict[str, Any] = {
         # 多元素叠加时按元素区分的样式（overlay 用）。chart_type 留空 = 跟随 compare.chart_type，
         # 跟随状态下默认让降水类画柱、气温类画线（更接近气候图习惯）
         "element_styles": {
-            "minTemp": {"chart_type": None, "linestyle": "-", "marker": "o"},
-            "maxTemp": {"chart_type": None, "linestyle": "--", "marker": "s"},
-            "meanTemp": {"chart_type": None, "linestyle": "-.", "marker": "^"},
-            "rainfall": {"chart_type": None, "linestyle": "-", "marker": "v"},
-            "raindays": {"chart_type": None, "linestyle": ":", "marker": "D"},
+            "minTemp": {"chart_type": None, "linestyle": "-", "marker": "o",
+                        "data_labels": dict(ELEMENT_LABEL_DEFAULTS)},
+            "maxTemp": {"chart_type": None, "linestyle": "--", "marker": "s",
+                        "data_labels": dict(ELEMENT_LABEL_DEFAULTS)},
+            "meanTemp": {"chart_type": None, "linestyle": "-.", "marker": "^",
+                         "data_labels": dict(ELEMENT_LABEL_DEFAULTS)},
+            "rainfall": {"chart_type": None, "linestyle": "-", "marker": "v",
+                         "data_labels": dict(ELEMENT_LABEL_DEFAULTS)},
+            "raindays": {"chart_type": None, "linestyle": ":", "marker": "D",
+                         "data_labels": dict(ELEMENT_LABEL_DEFAULTS)},
         },
         # 多元素图例：排列方式与位置
         "legend": {
@@ -547,6 +577,7 @@ DEFAULTS: dict[str, Any] = {
             "fontsize": 8.0,
             "format": "{:.1f}",
             "offset": 4.0,
+            "auto_skip": True,              # 柱宽放不下标签时自动隔项（关掉则每个都标）
         },
     },
 
@@ -1270,6 +1301,38 @@ def validate_config(cfg: dict[str, Any]) -> list[str]:
         raise ConfigError("compare.legend.position 只能是 inside（坐标区内）"
                           "/ bottom（横轴下方，默认）/ top（坐标区上方）"
                           f"（当前：{cmp_legend.get('position')}）")
+
+    # 柱状填充：单图（series.*）与对比图（compare.*）同一套取值
+    for owner, label in ((None, "series"), (cmpc, "compare")):
+        if owner is None:
+            targets = [(f"series.{key}", scfg) for key, scfg in (cfg.get("series") or {}).items()
+                       if isinstance(scfg, dict)]
+        else:
+            targets = [("compare", owner)]
+        for name, scfg in targets:
+            mode = str(scfg.get("bar_fill", "solid") or "solid").lower()
+            if mode not in BAR_FILL_MODES:
+                raise ConfigError(f"{name}.bar_fill 只能是 solid（实心，默认）"
+                                  "/ hollow（空心，仅边框）/ hatch（纹理填充）"
+                                  f"（当前：{scfg.get('bar_fill')}）")
+    style_dimension = str(cmpc.get("style_dimension", "city") or "city").lower()
+    if style_dimension not in STYLE_DIMENSIONS:
+        raise ConfigError("compare.style_dimension 只能是 city（按城市轮换，默认）/ "
+                          "metric（按元素轮换）/ hybrid（线型按城市、标记按元素）"
+                          f"（当前：{cmpc.get('style_dimension')}）")
+    fill_cycle = cmpc.get("bar_fill_cycle")
+    if fill_cycle is not None:
+        if not isinstance(fill_cycle, list):
+            raise ConfigError("compare.bar_fill_cycle 必须是数组（按城市顺序轮换）")
+        for item in fill_cycle:
+            if str(item).lower() not in BAR_FILL_MODES:
+                raise ConfigError("compare.bar_fill_cycle 只能包含 solid / hollow / hatch"
+                                  f"（当前：{item}）")
+    for key in ("bar_hatch_cycle", "bar_fill_color_cycle",
+                "markerfacecolor_cycle", "markeredgecolor_cycle"):
+        value = cmpc.get(key)
+        if value is not None and not isinstance(value, list):
+            raise ConfigError(f"compare.{key} 必须是数组（按城市顺序轮换）")
 
     # 10) 请求层：DNS 预解析超时（0 表示关闭预检查）
     raw_resolve = cfg["fetch"].get("resolve_timeout", 0) or 0

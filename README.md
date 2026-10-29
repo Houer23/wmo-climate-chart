@@ -231,6 +231,76 @@ profiles:
 > **YAML 书写提示**：`01`、`1.0`、`yes`/`no`/`on`/`off`、`#abc` 等会被 YAML 解析成数字或布尔，
 > 需要按字面字符串使用时请加引号（如 `month_label_style: "01"`、`linestyle: "#"`）。
 
+### 6.3 柱状填充与标记轮廓
+
+`chart_type=bar` 的元素（或 `compare.chart_type=bar` 的对比图）支持三种填充：
+
+| `bar_fill` | 效果 |
+|---|---|
+| `solid`（默认） | 实心，沿用元素色与透明度；可用 `bar_edgecolor` / `bar_linewidth` 勾边 |
+| `hollow` | 空心（仅边框）：边色缺省取元素色、线宽缺省 1.2，不会出现「选了空心却什么都看不见」 |
+| `hatch` | 纹理填充：`bar_hatch` 指定纹理（`/` `\` `|` `-` `+` `x` `o` `.` `*`，重复字符可加密），纹理色与边框同色 |
+
+`solid` 下填写 `bar_hatch` 可在纯色上叠加纹理；图例色块会跟着变（空心/带纹理）。
+`hatch` 模式**默认不填底色**（只画线条），需要底色时设 `bar_fill_color`：
+
+```yaml
+series:
+  rainfall:
+    bar_fill: hatch
+    bar_hatch: "///"
+    bar_fill_color: "#dbe6f0"     # 浅灰蓝底 + 蓝色斜纹；none = 只画纹理（默认）
+```
+
+**多城市对比：样式可按城市轮换**（颜色统一时靠样式区分城市）。除全局 `bar_fill` / `bar_hatch` 外，
+还有 `bar_fill_cycle`（如 `["solid", "hollow", "hatch"]`）与 `bar_hatch_cycle`；
+线型/标记的轮换维度由 `compare.style_dimension` 决定（`city` 默认 / `metric` 按元素 / `hybrid`）：
+
+```yaml
+compare:
+  colors: ["#000000"]
+  linestyle_cycle: ["-", "--", "-.", ":"]
+  bar_fill_cycle: ["solid", "hollow", "hatch"]
+  bar_hatch_cycle: ["", "", "///"]
+  style_dimension: city
+```
+
+**数据点标记的填充 / 轮廓**：单图用 `series.<元素>.markerfacecolor` / `markeredgecolor` /
+`markeredgewidth`，对比图用同名的 `compare.markerfacecolor` / `markeredgecolor` /
+`markeredgewidth`，并可按城市轮换（`markerfacecolor_cycle` / `markeredgecolor_cycle`）：
+
+```yaml
+compare:
+  colors: ["#000000"]
+  markerfacecolor: "#ffffff"
+  markeredgecolor: "#000000"
+  markeredgewidth: 1.5
+```
+
+单图的 `step` / `area` / `fill_between` 也会带上标记，`scatter` 支持独立的填充与轮廓；
+平滑曲线的**图例**会带标记（线上不额外画点）。
+
+### 6.4 对比图数值标签
+
+柱状对比的标签**跟着柱子走**（原先同月各城标签叠在同一个 x）；柱宽放不下标签时**自动隔项**，
+由 `compare.data_labels.auto_skip` 控制（默认开，关掉则每个点都标）。
+
+标签可**按元素单独控制**：`compare.data_labels.*` 是全局默认，
+`compare.element_styles.<元素>.data_labels.*`（`show` / `fontsize` / `format` / `offset`）
+为元素级覆盖，**元素级优先**、留空跟随全局：
+
+```yaml
+compare:
+  metrics: [minTemp, rainfall]
+  data_labels: {show: false}          # 全局默认：不显示
+  element_styles:
+    rainfall:
+      data_labels: {show: true, format: "{:.0f}"}   # 只给降水显示，取整
+```
+
+对比图标题同样受 `figure.title.show` 控制；`data.city_short_name` 打开后，**标题、图例、
+文件名**一律用短名，不再出现「标题短名、文件名全名」的混用。
+
 ---
 
 ## 7. 输出
