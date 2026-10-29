@@ -160,10 +160,8 @@ DEFAULTS: dict[str, Any] = {
     # ================= B. 请求层 =================
     "fetch": {
         "base_url": "https://worldweather.wmo.int",
-        "city_page_path": "{lang}/city.html?cityId={city_id}",
         "data_path": "{lang}/json/{city_id}_{lang}.xml",
         "city_index_path": "{lang}/json/Country_{lang}.xml",
-        "fetch_page_first": True,          # 先取 HTML 页做存在性校验与元信息核对
         "timeout": 30,
         "resolve_timeout": 10.0,           # DNS 预解析超时（秒）；0 = 关闭该预检查
         "retries": 4,                      # 应对实测的间歇性 TLS 断连

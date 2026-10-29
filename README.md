@@ -86,16 +86,16 @@ python wmo_climate.py --list-cities --country 中国
 
 ## 4. 数据源与实测约束
 
-数据源有两个地址，工具两者都会用：
+工具只访问两个地址（每城 1 次取数请求）：
 
 | 用途 | 地址 |
 |---|---|
-| 城市页面（存在性校验、页面标题） | `https://worldweather.wmo.int/{lang}/city.html?cityId={cityId}` |
-| 气候数据（真正取数） | `https://worldweather.wmo.int/{lang}/json/{cityId}_{lang}.xml` |
+| 气候数据（**唯一**数据来源） | `https://worldweather.wmo.int/{lang}/json/{cityId}_{lang}.xml` |
 | 城市索引（名称反查） | `https://worldweather.wmo.int/{lang}/json/Country_{lang}.xml` |
 
-> **重要**：城市页面本身**不含气候数值**（页面 HTML 仅含前端渲染脚本），
-> 气候数据由页面脚本异步加载 `{cityId}_{lang}.xml` 得到。该文件内容**实为 JSON**，
+> **重要**：官方城市页面本身**不含气候数值**（页面 HTML 仅含前端渲染脚本），
+> 气候数据由页面脚本异步加载 `{cityId}_{lang}.xml` 得到。因此**该数据文件才是权威来源**，
+> 工具只请求它；城市是否存在由该文件的 HTTP 404 判定（不再请求城市页面）。该文件内容**实为 JSON**，
 > 响应头标 `application/xml`，且带 UTF-8 BOM。
 
 实测发现并已在代码中处理的约束：
@@ -137,7 +137,7 @@ DrawClimateChart/
 │   └── pipeline.py           # 编排：单城 / 批量 / 对比 / 多图
 ├── scripts/                  # 可复用工具（夹具抓取 / CLI 验收 / 缺失值扫描）
 ├── tests/
-│   ├── test_regression.py    # 回归测试（离线可跑，401 项断言）
+│   ├── test_regression.py    # 回归测试（离线可跑，406 项断言）
 │   ├── fixtures/             # 真实响应样本（含城市索引与 samples/ 抽样数据）
 │   └── _output/              # 测试产物：渲染核对图 / 表格中间输出（不入库）
 ├── output/                   # 交付物：表格与图（生成物，不入库）
@@ -254,7 +254,7 @@ python tests/test_regression.py --network  # 追加联网用例
 ## 9. 已知限制
 
 - 数据源只提供**月气候平均值**（气候态），不含逐年历史序列；`meanTemp` 需派生。
-- 城市页面不含数据，因此「页面解析」实为**存在性校验 + 数据接口定位**，数值一律取自数据文件。
+- 官方城市页面不含气候数值，数值一律取自 `{cityId}_{lang}.xml`；城市是否存在由该文件的 HTTP 404 判定（工具不再请求城市页面）。
 - 第三轴（降水日数）仅有右轴刻度，不参与主轴对齐，适合并置观感展示。
 - `--compare` 只支持单一元素对比；不同城市统计时段可能不同，对比图中会在副标题列出各自时段。
 - 多图（`--cities`）**只出合并图、不出表格**；量程按**行**统一，因此跨行不可直接比高低（同一行内可比）。

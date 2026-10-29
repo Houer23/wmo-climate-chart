@@ -1715,9 +1715,9 @@ def test_request_progress_and_dns() -> None:
     logger = _Recorder()
     client = stub_client()
     client.logger = logger
-    result = client.get("https://example.invalid/a", note="页面校验 cityId 237")
+    result = client.get("https://example.invalid/a", note="气候数据 cityId 237")
     check("请求前打一条 INFO 进度日志（含业务说明）",
-          any(lv == "INFO" and m == "请求：页面校验 cityId 237" for lv, m in logger.msgs),
+          any(lv == "INFO" and m == "请求：气候数据 cityId 237" for lv, m in logger.msgs),
           logger.notes())
     check("请求完成后打一条 DEBUG（含状态码与耗时）",
           any(lv == "DEBUG" and "HTTP 200" in m and "s，第 1 次尝试" in m
@@ -1788,7 +1788,7 @@ def test_request_progress_and_dns() -> None:
 
         client._request_once = boom
         try:
-            client.get("https://boom.invalid/x", note="页面校验 cityId 1")
+            client.get("https://boom.invalid/x", note="气候数据 cityId 1")
         except Exception:  # noqa: BLE001 - 只关心告警内容
             pass
         check("网络异常告警带上具体原因",
@@ -1797,6 +1797,37 @@ def test_request_progress_and_dns() -> None:
               logger.notes())
     finally:
         socket.getaddrinfo = real_lookup
+
+
+def test_no_page_precheck() -> None:
+    """页面校验已移除：每个城市只请求气候数据文件，相关的配置项与函数也不复存在。"""
+    from src import http_client as hc
+    from src import pipeline as pipeline_mod
+
+    cfg = load_config(None)
+    check("fetch 配置不再含 fetch_page_first / city_page_path",
+          "fetch_page_first" not in cfg["fetch"] and "city_page_path" not in cfg["fetch"],
+          str(sorted(cfg["fetch"])))
+    check("http_client 不再提供 city_page_url", not hasattr(hc, "city_page_url"))
+    check("pipeline 不再提供 verify_city_page", not hasattr(pipeline_mod, "verify_city_page"))
+
+    fixture_text = fixture(237)
+    calls: list[str] = []
+
+    class _Client:
+        request_count = 0
+        retry_count = 0
+
+        def get(self, url, use_cache=True, accept=None, extra_headers=None, note=""):
+            calls.append(url)
+            return hc.FetchResult(url=url, status=200,
+                                  content=fixture_text.encode("utf-8"), text=fixture_text)
+
+    cityobj = pipeline_mod.fetch_city(_Client(), cfg, 237, None)
+    check("取数只发 1 次请求（只剩气候数据文件）",
+          len(calls) == 1 and calls[0].endswith("/zh/json/237_zh.xml"), str(calls))
+    check("移除页面校验后仍能正常解析",
+          cityobj.city_name == "北京" and cityobj.has_climate, cityobj.city_name)
 
 
 def test_city_index_flatten() -> None:
@@ -1882,6 +1913,7 @@ def main() -> int:
     run("请求层：批量排队限速", test_request_throttle)
     run("请求层：代理与证书只认配置", test_proxy_config)
     run("请求层：进度日志与 DNS 兜超时", test_request_progress_and_dns)
+    run("取数层：页面校验已移除", test_no_page_precheck)
 
     if "--network" in sys.argv:
         run("联网：真实请求与 404", test_network)

@@ -22,13 +22,11 @@ from .http_client import (
     FetchError,
     HttpClient,
     city_data_url,
-    city_page_url,
 )
 from .models import CityClimate, city_display_name, format_coord
 from .parser import NoClimateDataError, ParseError, parse_city_text
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 
 
 @dataclass
@@ -195,42 +193,15 @@ def _apply_overwrite(paths: list[Path], policy: str) -> list[Path]:
 
 # ---- 取数 --------------------------------------------------------------
 
-def _extract_page_title(html: str) -> str:
-    match = _TITLE_RE.search(html)
-    if not match:
-        return ""
-    text = re.sub(r"\s+", " ", match.group(1)).strip()
-    return text
-
-
-def verify_city_page(client: HttpClient, cfg: dict[str, Any], city_id: int, logger=None) -> str:
-    """请求城市 HTML 页做存在性校验（实测页面本身不含气候数值）。
-
-    返回页面标题，仅用于日志与提示，不参与数据解析。
-    """
-    url = city_page_url(cfg["fetch"], city_id, cfg["data"].get("lang", "zh"))
-    try:
-        result = client.get(url, use_cache=True,
-                            accept="text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-                            note=f"页面校验 cityId {city_id}")
-    except CityNotFoundError as exc:
-        raise CityNotFoundError(f"城市页面不存在，cityId={city_id} 可能无效（{exc}）") from exc
-    title = _extract_page_title(result.text)
-    if logger:
-        logger.debug(f"页面校验通过：cityId={city_id} 标题={title or '(无)'}")
-    return title
-
-
 def fetch_city(client: HttpClient, cfg: dict[str, Any], city_id: int, logger=None) -> CityClimate:
-    """取一个城市的气候数据并解析。"""
-    if cfg["fetch"].get("fetch_page_first", True):
-        try:
-            verify_city_page(client, cfg, city_id, logger)
-        except FetchError as exc:
-            # 页面校验失败不阻断：数据文件才是权威来源
-            if logger:
-                logger.warning(f"页面校验未通过，继续尝试数据文件：{exc}")
+    """取一个城市的气候数据并解析。
 
+    **只请求气候数据文件**（每城 1 次请求）。早期的"先请求城市 HTML 页做存在性校验"
+    已移除——页面本身不含气候数值，抓到的 `<title>` 从未参与任何逻辑，却让请求数、
+    流量与故障耗时都翻倍（实测页面 ~115KB / 3.4s，数据文件仅 ~3.7KB / 1.6s）；
+    而"城市是否存在"由数据文件自己的 HTTP 404 判定即可（`client.get` 会抛
+    `CityNotFoundError`），本就无需页面代劳。
+    """
     url = city_data_url(cfg["fetch"], city_id, cfg["data"].get("lang", "zh"))
     result = client.get(url, accept="application/json,text/xml,*/*;q=0.8",
                         note=f"气候数据 cityId {city_id}")

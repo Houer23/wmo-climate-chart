@@ -380,15 +380,6 @@ def build_url(template: str, base_url: str, **kwargs: Any) -> str:
     return base_url.rstrip("/") + "/" + path.lstrip("/")
 
 
-def city_page_url(cfg: dict[str, Any], city_id: int, lang: str) -> str:
-    return build_url(
-        cfg.get("city_page_path", "{lang}/city.html?cityId={city_id}"),
-        cfg.get("base_url", "https://worldweather.wmo.int"),
-        lang=lang,
-        city_id=city_id,
-    )
-
-
 def city_data_url(cfg: dict[str, Any], city_id: int, lang: str) -> str:
     return build_url(
         cfg.get("data_path", "{lang}/json/{city_id}_{lang}.xml"),
