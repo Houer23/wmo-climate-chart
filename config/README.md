@@ -279,7 +279,7 @@ profiles:
 | `linewidth` | float | `2.0` | 线宽 |
 | `linestyle` | str | `"-"` | 线型 `-` `--` `-.` `:` |
 | `zorder` | float | `3` | 绘制层级 |
-| `marker` | str | `"o"` | 数据点标记（`""` 不显示） |
+| `marker` | str | `"o"` | 数据点标记：`""`（不显示）`.` `o` `s` `^` `v` `D` `P` `X` `*` `+` `x` |
 | `markersize` | float | `4.5` | 标记大小 |
 | `markerfacecolor` / `markeredgecolor` | color/`auto` | `"auto"` | 标记填充色与边色；`auto` = 与 `color` 一致 |
 | `markeredgewidth` | float | `1.0` | 标记边宽 |

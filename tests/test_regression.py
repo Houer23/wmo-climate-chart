@@ -530,6 +530,33 @@ def test_series_toggle() -> None:
         check("关闭全部元素时给出明确错误", False, "未报错")
 
 
+def test_marker_symbols() -> None:
+    """marker 接受全部 matplotlib 合法符号。
+
+    重点覆盖小点 ``"."``——网页版曾因标记枚举漏掉 ``"."`` 导致配置校验直接报错，
+    桌面版此处不做符号白名单，需保证符号名原样落到 Line2D 上、且不抛异常。
+    """
+    from matplotlib import pyplot as plt
+
+    beijing = city(237)
+    for marker in (".", "o", "s", "^", "v", "D", "P", "X", "*", "+", "x"):
+        cfg = load_config(None, None, [("series.minTemp.marker", marker)])
+        check(f"marker={marker!r} 配置不报错",
+              cfg["series"]["minTemp"]["marker"] == marker,
+              repr(cfg["series"]["minTemp"]["marker"]))
+        fig = _render_figure(cfg, beijing)
+        drawn = {str(line.get_marker()).lower() for ax in fig.axes for line in ax.get_lines()}
+        check(f"marker={marker!r} 已应用到数据点", marker.lower() in drawn, f"实际：{sorted(drawn)}")
+        plt.close(fig)
+
+    # 空字符串 = 不显示标记
+    cfg = load_config(None, None, [("series.minTemp.marker", ""), ("series.maxTemp.marker", "")])
+    fig = _render_figure(cfg, beijing)
+    drawn = {str(line.get_marker()).lower() for ax in fig.axes for line in ax.get_lines()}
+    check('marker="" 时不绘制数据点标记', drawn <= {"none"}, f"实际：{sorted(drawn)}")
+    plt.close(fig)
+
+
 def _render_figure(cfg, city_obj):
     """渲染但**不落盘**，返回 Figure 供层级断言使用。"""
     from src import chart as chart_mod
@@ -1897,6 +1924,7 @@ def main() -> int:
     run("绘图层：全部配置渲染", test_all_profiles_render)
     run("绘图层：边界城市渲染", test_edge_city_render)
     run("绘图层：元素全部关闭", test_series_toggle)
+    run("绘图层：数据点标记符号（含小点 .）", test_marker_symbols)
     run("绘图层：背景色带层级", test_background_bands_layering)
     run("绘图层：季节色带半球反季", test_seasonal_bands_hemisphere)
     run("绘图层：平均降水线", test_mean_rain_line)
