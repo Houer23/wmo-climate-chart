@@ -16,7 +16,7 @@ from .chart import (
     render_multi_city_chart,
 )
 from .city_index import CityEntry, CityIndex, load_city_index
-from .config_loader import resolve_grid
+from .config_loader import ConfigError, compare_metrics, resolve_grid
 from .http_client import (
     CityNotFoundError,
     FetchError,
@@ -156,12 +156,26 @@ def table_basename(cfg: dict[str, Any], city: CityClimate) -> str:
 
 
 def compare_basename(cfg: dict[str, Any], cities: list[CityClimate]) -> str:
+    """对比图文件名主干。
+
+    占位符：``{city_count}`` / ``{cities}`` / ``{metric}``（首个元素）/ ``{metrics}``
+    （多元素用 ``-`` 连接）/ ``{mode}`` / ``{profile}``。模板里没写 ``{metrics}`` 时，多元素会
+    自动把 ``{metric}`` 展开成 ``minTemp-rainfall``；叠加模式再加 ``_overlay`` 后缀，避免与
+    分面产物同名互相覆盖。
+    """
     template = cfg["output"].get("compare_name_template", "{city_count}城对比_{metric}")
-    metric = str((cfg.get("compare") or {}).get("metric", "metric"))
+    try:
+        metrics = compare_metrics(cfg)
+    except ConfigError:
+        metrics = [str((cfg.get("compare") or {}).get("metric", "metric"))]
+    mode = str((cfg.get("compare") or {}).get("mode", "facet")).lower()
+    metric = metrics[0]
+    if len(metrics) > 1 and "{metrics}" not in template:
+        metric = "-".join(metrics) + ("_overlay" if mode == "overlay" else "")
     names = "_".join(c.city_name for c in cities[:4]) or "compare"
     return _safe(template.format(
-        city_count=len(cities), metric=metric, cities=names,
-        profile=cfg.get("profile_name", ""),
+        city_count=len(cities), metric=metric, metrics="-".join(metrics), mode=mode,
+        cities=names, profile=cfg.get("profile_name", ""),
     ))
 
 

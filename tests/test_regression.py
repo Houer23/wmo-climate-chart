@@ -1139,6 +1139,160 @@ def test_compare_render() -> None:
     check("对比柱状图渲染成功", path3.exists() and path3.stat().st_size > 5000)
 
 
+# ======================= 4a-2. 多元素对比 =======================
+
+def _compare_figure(cfg, cities):
+    """渲染对比图但**不落盘**，返回 ``(Figure, report)``，供图例/轴断言使用。"""
+    from src import chart as chart_mod
+
+    captured: dict = {"report": {}}
+    original = chart_mod._save
+    chart_mod._save = lambda fig, out_paths, cfg: (captured.__setitem__("fig", fig), out_paths)[1]
+    try:
+        render_comparison_chart(cities, cfg, [], logger=None, report=captured["report"])
+    finally:
+        chart_mod._save = original
+    return captured["fig"], captured["report"]
+
+
+def _legend_split(text: str) -> tuple[str, str]:
+    """把图例文案拆成 ``(城市, 元素)``：形如「北京 · 最高气温（1.6~30.8）」。"""
+    head = text.split("（")[0]
+    parts = [part.strip() for part in head.split("·")]
+    return parts[0], parts[-1]
+
+
+def test_compare_multi_metrics() -> None:
+    """多元素对比：metrics 解析、分面/叠加渲染、图例排列与位置、校验。"""
+    from src.config_loader import compare_metrics
+    from src.pipeline import compare_basename
+
+    cities = [city(237), city(1), city(156)]
+    out_dir = VERIFY_DIR / "多元素对比"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # ---- metrics 解析：保序去重、单元素回退 ----
+    cfg = load_config("compare", None, [("compare.metrics", ["maxTemp", "minTemp", "maxTemp"])])
+    check("compare.metrics 保序去重", compare_metrics(cfg) == ["maxTemp", "minTemp"],
+          str(compare_metrics(cfg)))
+    cfg_single = load_config("compare", None, [("compare.metric", "ppt")])
+    check("compare.metric 别名规范化", compare_metrics(cfg_single) == ["rainfall"],
+          str(compare_metrics(cfg_single)))
+
+    # ---- 分面：一格一元素 ----
+    cfg_facet = load_config("compare", None, [("compare.metrics", ["minTemp", "maxTemp"])])
+    validate_config(cfg_facet)
+    name = compare_basename(cfg_facet, cities)
+    check("多元素文件名含全部元素", "minTemp-maxTemp" in name, name)
+    path = out_dir / f"{name}.png"
+    report: dict = {}
+    render_comparison_chart(cities, cfg_facet, [path], logger=None, report=report)
+    check("分面：两元素对比渲染成功", path.exists() and path.stat().st_size > 5000)
+    check("分面：report.mode == facet", report.get("mode") == "facet", str(report.get("mode")))
+    check("分面：report.grid == 2x1", report.get("grid") == "2x1", str(report.get("grid")))
+    check("分面：要素列表含两个元素", len(report.get("series") or []) == 2, str(report.get("series")))
+
+    cfg_mix = load_config("compare", None, [("compare.metrics", ["meanTemp", "rainfall"]),
+                                            ("compare.grid", "2x2")])
+    path_mix = out_dir / "分面_温雨.png"
+    report_mix: dict = {}
+    render_comparison_chart(cities, cfg_mix, [path_mix], logger=None, report=report_mix)
+    check("分面：气温+降水混排渲染成功", path_mix.exists() and path_mix.stat().st_size > 5000)
+    check("分面：显式网格 2x2 生效", report_mix.get("grid") == "2x2", str(report_mix.get("grid")))
+
+    # ---- 叠加：同图双轴 ----
+    cfg_overlay = load_config("compare", None, [
+        ("compare.metrics", ["maxTemp", "rainfall"]),
+        ("compare.mode", "overlay"),
+        ("compare.sort_by", "none"),
+    ])
+    path_ov = out_dir / "叠加_温雨.png"
+    report_ov: dict = {}
+    render_comparison_chart(cities, cfg_overlay, [path_ov], logger=None, report=report_ov)
+    check("叠加：气温+降水渲染成功", path_ov.exists() and path_ov.stat().st_size > 5000)
+    check("叠加：report.mode == overlay", report_ov.get("mode") == "overlay",
+          str(report_ov.get("mode")))
+    fig_ov, _ = _compare_figure(cfg_overlay, cities)
+    check("叠加：气温走主轴、降水走副轴（两张坐标轴）", len(fig_ov.axes) == 2, str(len(fig_ov.axes)))
+
+    cfg_three = load_config("compare", None, [
+        ("compare.metrics", ["meanTemp", "rainfall", "raindays"]),
+        ("compare.mode", "overlay"),
+    ])
+    fig_three, _ = _compare_figure(cfg_three, cities)
+    check("叠加：气温/降水/降水日数分走三根纵轴", len(fig_three.axes) == 3,
+          str(len(fig_three.axes)))
+
+    cfg_rd = load_config("compare", None, [("compare.metrics", ["meanTemp", "raindays"])])
+    fig_rd, _ = _compare_figure(cfg_rd, cities)
+    ylabels = [ax.get_ylabel() for ax in fig_rd.axes]
+    check("分面：降水日数格纵轴标题用「天」", any(label.endswith("(天)") for label in ylabels),
+          str(ylabels))
+
+    # ---- 图例排列：同城一行 / 同要素一行（matplotlib 图例按列填充）----
+    for layout, expect in (("city", ("same_city", 0, 2)), ("metric", ("same_city", 0, 1))):
+        cfg_legend = load_config("compare", None, [
+            ("compare.metrics", ["maxTemp", "rainfall"]),
+            ("compare.mode", "overlay"),
+            ("compare.sort_by", "none"),
+            ("compare.legend.layout", layout),
+        ])
+        fig, _ = _compare_figure(cfg_legend, [city(237), city(1)])
+        fig.canvas.draw()
+        texts = [item.get_text() for item in fig.axes[0].get_legend().get_texts()]
+        pairs = [_legend_split(text) for text in texts]
+        first, second = pairs[expect[1]], pairs[expect[2]]
+        check(f"图例排列 {layout}：第 {expect[1]} 与第 {expect[2]} 项同城",
+              first[0] == second[0], f"{pairs}")
+        check(f"图例排列 {layout}：两项元素不同", first[1] != second[1], f"{pairs}")
+
+    # ---- 图例位置：横轴下方，且 gap 越大离得越远 ----
+    from matplotlib import pyplot as plt
+
+    heights = {}
+    for gap in (0.05, 0.30):
+        cfg_pos = load_config("compare", None, [
+            ("compare.metrics", ["maxTemp", "rainfall"]),
+            ("compare.mode", "overlay"),
+            ("compare.legend.position", "bottom"),
+            ("compare.legend.gap", gap),
+        ])
+        fig, _ = _compare_figure(cfg_pos, [city(237), city(1)])
+        fig.canvas.draw()
+        ax = fig.axes[0]
+        legend_bbox = ax.get_legend().get_window_extent()
+        axes_bbox = ax.get_window_extent()
+        check(f"图例位于横轴下方（gap={gap}）", legend_bbox.y1 <= axes_bbox.y0 + 1,
+              f"legend.y1={legend_bbox.y1:.1f} axes.y0={axes_bbox.y0:.1f}")
+        heights[gap] = legend_bbox.y1
+        plt.close(fig)
+    check("图例 gap 越大离横轴越远", heights[0.30] < heights[0.05],
+          f"{heights[0.05]:.1f} vs {heights[0.30]:.1f}")
+
+    # ---- 校验：非法元素/超上限/非法枚举 ----
+    for overrides, note in (
+        ([("compare.metrics", ["q"])], "未知元素"),
+        ([("compare.metrics", ["minTemp", "maxTemp", "meanTemp", "rainfall", "raindays"])],
+         "超过 4 个元素"),
+        ([("compare.metrics", "minTemp,maxTemp")], "metrics 必须是数组"),
+        ([("compare.mode", "xxx")], "mode 非法"),
+        ([("compare.legend.layout", "xxx")], "layout 非法"),
+        ([("compare.legend.position", "xxx")], "position 非法"),
+    ):
+        try:
+            validate_config(load_config("compare", None, overrides))
+        except ConfigError:
+            check(f"多元素对比校验：{note}时报错", True)
+        else:
+            check(f"多元素对比校验：{note}时报错", False, "未报错")
+
+    # ---- 单元素仍走原单图路径 ----
+    cfg_one = load_config("compare", None, [("compare.metric", "meanTemp")])
+    _fig_one, report_one = _compare_figure(cfg_one, cities)
+    check("单元素：report.mode == single", report_one.get("mode") == "single",
+          str(report_one.get("mode")))
+
+
 # ======================= 4b. 多图（多城市同画布） =======================
 
 def test_parse_grid() -> None:
@@ -1931,6 +2085,7 @@ def main() -> int:
     run("绘图层：极值标注自动避让", test_extremes_label_avoidance)
     run("绘图层：极值标注窄空间避让", test_extremes_label_avoidance_cramped_axis)
     run("绘图层：多城市对比", test_compare_render)
+    run("绘图层：多元素对比（分面/叠加/图例）", test_compare_multi_metrics)
     run("绘图层：多图排列解析", test_parse_grid)
     run("绘图层：多图（多城市同画布）", test_multi_city_chart)
     run("编排层：多图告警与落盘", lambda: test_run_multi_offline(tmp))

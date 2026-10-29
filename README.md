@@ -43,6 +43,20 @@ python wmo_climate.py --city-id 237 --m hh,r12,t14,p14,tt18
 # 多城市对比
 python wmo_climate.py --compare 北京 --compare 1 --compare 156 --profile compare
 
+# 多城市多元素对比：分面（一格一元素，默认）
+python wmo_climate.py --compare 北京 --compare 1 --compare-metric maxTemp,rainfall
+
+# 多城市多元素对比：叠加到同一张图（颜色=城市、线型=元素；气温主轴、降水副轴）
+python wmo_climate.py --compare 北京 --compare 1 --compare-metric maxTemp,rainfall \
+  --compare-mode overlay --set compare.legend.layout=metric
+
+# 图例位置与排列：横轴下方 0.2（坐标区高度比例）、同城一行、4 列
+python wmo_climate.py --compare 北京 --compare 1 --compare-metric minTemp,maxTemp,rainfall \
+  --compare-mode overlay \
+  --set compare.legend.layout=city --set compare.legend.position=bottom \
+  --set compare.legend.gap=0.2 --set compare.legend.ncol=3
+
+
 # 多图：多个城市画在同一张画布（默认一行横排；2x2 = 2 列 2 行）
 python wmo_climate.py --cities 北京,香港,莫斯科
 python wmo_climate.py --cities 北京,香港,莫斯科,伦敦 --grid 2x2
@@ -61,7 +75,8 @@ python wmo_climate.py --list-cities --country 中国
 | `--city-id ID` | 城市编号；逗号一次传多个（`237,1,156`）或重复传入均可，自动去重 |
 | `--city 名称` | 城市名称，自动反查 cityId；同样支持逗号批量（`北京,香港`），自动去重 |
 | `--compare ID或名称` | 多城市对比，可重复；同时传多个 cityId 或城市名 |
-| `--compare-metric 元素` | 对比元素：`minTemp`/`maxTemp`/`meanTemp`/`rainfall`/`raindays` |
+| `--compare-metric 元素` | 对比元素：`minTemp`/`maxTemp`/`meanTemp`/`rainfall`/`raindays`；**逗号可给多个**（如 `maxTemp,rainfall`）做多元素对比，最多 4 个 |
+| `--compare-mode 方式` | 多元素呈现：`facet` 一格一元素（默认）/ `overlay` 同一张图叠加（颜色=城市、线型与标记=元素，气温主轴、降水副轴） |
 | `--cities ID或名称` | **多图**：多个城市画在**同一张画布**；支持逗号批量（`北京,香港`）与重复传参，自动去重；与 `--compare` **互斥** |
 | `--grid 列x行` | 多图排列，如 `2x2`（2 列 2 行）、`3x2`（3 列 2 行），分隔符 `x`/`×`/`*`/`,` 均可，**前=列数、后=行数**；省略 = `1×N` 全横排 |
 | `--profile 名称` | 选用配置；**未指定则用默认配置** |
@@ -256,5 +271,5 @@ python tests/test_regression.py --network  # 追加联网用例
 - 数据源只提供**月气候平均值**（气候态），不含逐年历史序列；`meanTemp` 需派生。
 - 官方城市页面不含气候数值，数值一律取自 `{cityId}_{lang}.xml`；城市是否存在由该文件的 HTTP 404 判定（工具不再请求城市页面）。
 - 第三轴（降水日数）仅有右轴刻度，不参与主轴对齐，适合并置观感展示。
-- `--compare` 只支持单一元素对比；不同城市统计时段可能不同，对比图中会在副标题列出各自时段。
+- 多元素对比（`--compare-metric a,b`）分面时**一格一元素**、叠加时同一张图多轴：叠加模式下若主副轴都画柱，两种柱子的高度分属两套刻度，不能直接比高低；不同城市统计时段可能不同，对比图副标题会列出各自时段。
 - 多图（`--cities`）**只出合并图、不出表格**；量程按**行**统一，因此跨行不可直接比高低（同一行内可比）。

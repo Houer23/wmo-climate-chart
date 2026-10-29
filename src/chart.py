@@ -19,12 +19,29 @@ from matplotlib.text import Text  # noqa: E402
 from matplotlib.ticker import FuncFormatter, MaxNLocator  # noqa: E402
 from matplotlib.transforms import Bbox  # noqa: E402
 
-from .config_loader import resolve_grid  # noqa: E402
+from .config_loader import compare_metrics, resolve_grid  # noqa: E402
 from .models import CityClimate, city_display_name, format_coord, normalize_series_key  # noqa: E402
 
 TEMP_KEYS = ("minTemp", "maxTemp", "meanTemp")
 RAIN_KEYS = ("rainfall", "raindays")
 AXIS_KEYS = ("primary", "secondary", "tertiary")
+
+#: 对比图里元素的中文名（标题、图例、纵轴标题共用）
+METRIC_LABELS = {
+    "minTemp": "日均最低气温",
+    "maxTemp": "日均最高气温",
+    "meanTemp": "日均气温",
+    "rainfall": "平均总降水",
+    "raindays": "平均降水日数",
+}
+#: 对比图里「短名」，用于图例与多元素标题（比中文全名短，排得开）
+METRIC_SHORT_LABELS = {
+    "minTemp": "最低气温",
+    "maxTemp": "最高气温",
+    "meanTemp": "日均气温",
+    "rainfall": "降水量",
+    "raindays": "降水日数",
+}
 
 # 绘制顺序：柱状类先画（打底），折线/曲线类后画（压在上层）。
 # 图例顺序不受影响，仍按 series.order_in_legend。
@@ -1454,15 +1471,14 @@ def render_multi_city_chart(cities: list[CityClimate], cfg: dict[str, Any],
 
 # ---- 主入口：多城市对比 ------------------------------------------------
 
-def render_comparison_chart(cities: list[CityClimate], cfg: dict[str, Any],
-                            out_paths: list[Path], logger=None,
-                            report: Optional[dict[str, Any]] = None) -> list[Path]:
-    usable = [c for c in cities if c.has_climate]
-    if not usable:
-        raise ChartError("参与对比的城市都没有气候数据，无法绘图")
-
+def _render_compare_single(cities: list[CityClimate], cfg: dict[str, Any],
+                           out_paths: list[Path], logger=None,
+                           report: Optional[dict[str, Any]] = None,
+                           metric: str = "meanTemp") -> list[Path]:
+    """单元素对比（改造前的原始实现，行为保持不变）。"""
+    usable = list(cities)
     cmpc = cfg.get("compare") or {}
-    metric = normalize_series_key(str(cmpc.get("metric", "meanTemp")))
+    metric = normalize_series_key(metric)
     temp_unit = (cfg["data"].get("temp_unit") or "C").upper()
     rain_unit = (cfg["data"].get("rain_unit") or "mm").lower()
 
@@ -1625,5 +1641,660 @@ def render_comparison_chart(cities: list[CityClimate], cfg: dict[str, Any],
     if report is not None:
         report["series"] = [metric_label]
         report["metric"] = metric_label
+        report["metrics"] = [metric_label]
+        report["mode"] = "single"
         report["city_count"] = len(usable)
     return _save(fig, out_paths, cfg)
+
+
+# ---- 多元素对比：公共辅助 ----------------------------------------------
+
+def _compare_units(cfg: dict[str, Any]) -> tuple[str, str]:
+    return ((cfg["data"].get("temp_unit") or "C").upper(),
+            (cfg["data"].get("rain_unit") or "mm").lower())
+
+
+def _metric_axis_key(metric: str) -> str:
+    """元素归哪根纵轴：气温走主轴、降水量走副轴、降水日数走第三轴（量级差太大）。"""
+    if metric == "raindays":
+        return "tertiary"
+    return "secondary" if metric in RAIN_KEYS else "primary"
+
+
+def _compare_values(city: CityClimate, cfg: dict[str, Any], metric: str) -> np.ndarray:
+    temp_unit, rain_unit = _compare_units(cfg)
+    raw = [np.nan if v is None else float(v) for v in city.values(metric, temp_unit, rain_unit)]
+    return _apply_missing(np.array(raw, dtype=float), _missing_policy(cfg))
+
+
+def _compare_sort_cities(cities: list[CityClimate], cfg: dict[str, Any],
+                         metric: str) -> list[CityClimate]:
+    """按 ``compare.sort_by`` 排序；多元素时统一以 ``sort_metric`` 为基准，保证各格顺序一致。"""
+    cmpc = cfg.get("compare") or {}
+    mode = str(cmpc.get("sort_by", "value_desc"))
+    if mode == "none" or not cities:
+        return list(cities)
+    if mode == "name":
+        return sorted(cities, key=lambda c: c.city_name)
+    if mode == "city_id":
+        return sorted(cities, key=lambda c: c.city_id)
+    temp_unit, rain_unit = _compare_units(cfg)
+
+    def key(city: CityClimate) -> float:
+        value = city.annual(metric, temp_unit, rain_unit)
+        value = float("-inf") if value is None else value
+        return value if mode == "value_asc" else -value
+
+    return sorted(cities, key=key)
+
+
+def _compare_colors(cities: list[CityClimate], cfg: dict[str, Any]) -> list[str]:
+    """城市配色：``color_map`` > ``colors`` 循环；``color_by=city_id`` 时按编号取色。"""
+    cmpc = cfg.get("compare") or {}
+    colors = list(cmpc.get("colors") or ["#d85a30", "#185fa5"])
+    color_map = cmpc.get("color_map") or {}
+    result: list[str] = []
+    for index, city in enumerate(cities):
+        if str(cmpc.get("color_by", "order")) == "city_id":
+            result.append(colors[city.city_id % len(colors)])
+        else:
+            result.append(color_map.get(city_display_name(city, cfg))
+                          or colors[index % len(colors)])
+    return result
+
+
+def _compare_label(cmpc: dict[str, Any], cfg: dict[str, Any], city: CityClimate,
+                   metric_label: str, values: np.ndarray, multiple: bool) -> str:
+    """图例文案：``label_template`` 可写 ``{city}`` / ``{metric}`` / ``{city_id}``。
+
+    多元素图里若模板没写 ``{metric}``，自动补一个「· 元素名」，否则同城多条线同名。
+    """
+    template = str(cmpc.get("label_template") or "{city}")
+    if multiple and "{metric}" not in template:
+        template += " · {metric}"
+    try:
+        label = template.format(city=city_display_name(city, cfg), metric=metric_label,
+                                city_id=city.city_id,
+                                profile=str(cfg.get("profile_name", "")))
+    except (KeyError, IndexError, ValueError):
+        label = city_display_name(city, cfg)
+    if cmpc.get("show_value_range", False):
+        valid = values[np.isfinite(values)]
+        if valid.size:
+            label += f"（{valid.min():.1f}~{valid.max():.1f}）"
+    return label
+
+
+def _plot_compare_series(ax, x: np.ndarray, values: np.ndarray, *, chart_type: str,
+                         color: str, linestyle: str, marker: str, alpha: float,
+                         linewidth: float, markersize: float, bar_width: float,
+                         offset: float, label: str) -> Any:
+    """按图形类型画一条「城市 × 元素」序列，返回图例句柄。"""
+    if chart_type in BAR_CHART_TYPES:
+        return ax.bar(x + offset, np.nan_to_num(values, nan=0.0), width=bar_width,
+                      color=color, alpha=alpha, label=label, zorder=3)
+    if chart_type in ("smooth", "spline"):
+        xs, ys = _hermite_smooth(x, values, 240)
+        handle, = ax.plot(xs, ys, color=color, alpha=alpha, linewidth=linewidth,
+                          linestyle=linestyle, label=label, zorder=3)
+        ax.plot(x, values, linestyle="none", marker=marker,
+                markersize=markersize, color=color, zorder=3.1)
+        return handle
+    handle, = ax.plot(x, values, color=color, alpha=alpha, linewidth=linewidth,
+                      linestyle=linestyle, marker=marker, markersize=markersize,
+                      label=label, zorder=3)
+    return handle
+
+
+def _compare_legend_grid(handles: list[Any], layout: str,
+                         n_metrics: int, n_cities: int) -> tuple[list[Any], int]:
+    """按「同城一行 / 同要素一行」重排图例句柄，返回 ``(手柄, 列数)``。
+
+    matplotlib 的图例**按列填充**（4 项 ``ncol=2`` 显示为 ``1 3 / 2 4``），所以要先把
+    目标网格按列优先展平。``handles`` 按「城市优先」排列：``handles[city * n_metrics + metric]``。
+
+    * ``city``：行=城市、列=元素 → 每行容纳 ``n_metrics`` 项
+    * ``metric``：行=元素、列=城市 → 每行容纳 ``n_cities`` 项
+    """
+    if layout == "auto" or n_metrics <= 1:
+        return list(handles), 0
+    if layout == "city":
+        order = [c * n_metrics + m for m in range(n_metrics) for c in range(n_cities)]
+        return [handles[i] for i in order if i < len(handles)], n_metrics
+    order = [c * n_metrics + m for c in range(n_cities) for m in range(n_metrics)]
+    return [handles[i] for i in order if i < len(handles)], n_cities
+
+
+def _add_compare_legend(ax, handles: list[Any], cfg: dict[str, Any], ncol: int = 0,
+                        figure_anchor: bool = False) -> None:
+    """多元素对比的图例：``compare.legend`` 控制排列列数与相对横轴的位置。
+
+    * ``position=inside``：沿用 ``figure.legend`` 的 ``loc`` / ``bbox_to_anchor``
+    * ``position=bottom``：放在横轴下方，并预留 ``reserve`` 下边距
+    * ``position=top``：放在坐标区上方
+
+    单图（overlay）时以坐标区为基准，``gap`` = 坐标区高度比例；分面（facet）时同一张图
+    有多个坐标区，``figure_anchor=True`` 改为整图居中（``reserve``/``gap`` 按整图比例）。
+    """
+    lcfg = cfg["figure"].get("legend") or {}
+    if not lcfg.get("show", True) or not handles:
+        return
+    cmpc = cfg.get("compare") or {}
+    ccmp = cmpc.get("legend") or {}
+    fig = ax.figure
+    position = str(ccmp.get("position", "bottom")).lower()
+    gap = float(ccmp.get("gap", 0.10))
+    reserve = float(ccmp.get("reserve", 0.24))
+    columns = int(ccmp.get("ncol") or 0) or int(ncol or 0) or int(cmpc.get("legend_ncol") or 0)
+    if columns <= 0:
+        columns = min(len(handles), 5)
+    kwargs: dict[str, Any] = {
+        "ncol": columns,
+        "fontsize": float(lcfg.get("fontsize", 10)),
+        "frameon": bool(lcfg.get("frameon", True)),
+        "framealpha": float(lcfg.get("framealpha", 0.9)),
+        "markerscale": float(lcfg.get("markerscale", 1.0)),
+        "columnspacing": float(lcfg.get("columnspacing", 1.6)),
+        "handlelength": float(lcfg.get("handlelength", 2.0)),
+        "handletextpad": float(lcfg.get("handletextpad", 0.6)),
+    }
+    if lcfg.get("title"):
+        kwargs["title"] = str(lcfg["title"])
+    if figure_anchor:
+        owner = fig
+        if position == "inside":
+            kwargs["loc"] = str(lcfg.get("loc", "upper center"))
+            anchor = lcfg.get("bbox_to_anchor")
+            if isinstance(anchor, (list, tuple)) and len(anchor) == 2:
+                kwargs["bbox_to_anchor"] = (float(anchor[0]), float(anchor[1]))
+            legend = owner.legend(handles=handles, **kwargs)
+        elif position == "top":
+            # 图例顶边固定在标题/副标题之下，向下生长，避免行数多时压到标题
+            fig.subplots_adjust(top=0.74)
+            legend = owner.legend(handles=handles, loc="upper center",
+                                  bbox_to_anchor=(0.5, 0.90), **kwargs)
+        else:
+            fig.subplots_adjust(bottom=reserve)
+            legend = owner.legend(handles=handles, loc="upper center",
+                                  bbox_to_anchor=(0.5, reserve * 0.62), **kwargs)
+    elif position == "inside":
+        kwargs["loc"] = str(lcfg.get("loc", "upper center"))
+        anchor = lcfg.get("bbox_to_anchor")
+        if isinstance(anchor, (list, tuple)) and len(anchor) == 2:
+            kwargs["bbox_to_anchor"] = (float(anchor[0]), float(anchor[1]))
+        legend = ax.legend(handles=handles, **kwargs)
+    elif position == "top":
+        legend = ax.legend(handles=handles, loc="lower center",
+                           bbox_to_anchor=(0.5, 1.0 + gap), **kwargs)
+    else:
+        fig.subplots_adjust(bottom=reserve)
+        legend = ax.legend(handles=handles, loc="upper center",
+                           bbox_to_anchor=(0.5, -gap), **kwargs)
+    if lcfg.get("facecolor"):
+        legend.get_frame().set_facecolor(str(lcfg["facecolor"]))
+    if lcfg.get("edgecolor"):
+        legend.get_frame().set_edgecolor(str(lcfg["edgecolor"]))
+
+
+def _compare_context(cities: list[CityClimate], cfg: dict[str, Any],
+                     metrics: list[str]) -> dict[str, str]:
+    """多元素标题/副标题的格式化上下文。"""
+    temp_unit, _rain_unit = _compare_units(cfg)
+    names = "、".join(METRIC_SHORT_LABELS.get(m, m) for m in metrics)
+    return {
+        "city": f"{len(cities)} 个城市",
+        "city_count": str(len(cities)),
+        "city_id": "",
+        "station": "",
+        "member": "、".join({c.member.mem_name for c in cities if c.member.mem_name}),
+        "org": "",
+        "period": "、".join(sorted({c.period_note() for c in cities if c.period_note()})),
+        "lat": "", "lon": "",
+        "profile": str(cfg.get("profile_name", "")),
+        "temp_unit": "°F" if temp_unit == "F" else "°C",
+        "rain_unit": cities[0].rain_unit_label() if cities else "毫米",
+        "metric": names,
+        "metrics": names,
+        "metric_count": str(len(metrics)),
+    }
+
+
+def _metric_axis_label(metric: str, cfg: dict[str, Any], city: Optional[CityClimate]) -> str:
+    """分面里单个元素格的纵轴标题：「元素名 (单位)」，单位按元素类型取。"""
+    base = METRIC_LABELS.get(metric, metric)
+    temp_unit, _rain_unit = _compare_units(cfg)
+    if metric in RAIN_KEYS:
+        unit = "天" if metric == "raindays" else (city.rain_unit_label() if city else "毫米")
+    else:
+        unit = "°F" if temp_unit == "F" else "°C"
+    return f"{base} ({unit})"
+
+
+def _compare_sort_metric(cmpc: dict[str, Any], metrics: list[str]) -> str:
+    """多元素排序基准：``compare.sort_metric``，缺省用第一个元素；非法值回退。"""
+    raw = str(cmpc.get("sort_metric") or "").strip()
+    if not raw:
+        return metrics[0]
+    try:
+        key = normalize_series_key(raw)
+    except KeyError:
+        return metrics[0]
+    return key if key in metrics else metrics[0]
+
+
+def _compare_metric_style(cmpc: dict[str, Any], metric: str, index: int) -> dict[str, str]:
+    """``overlay`` 下单个元素的样式。
+
+    ``element_styles.<元素>`` 优先；没写 ``chart_type`` 时跟随 ``compare.chart_type``——
+    而 ``compare.chart_type`` 仍是默认的 ``smooth`` 时，降水类元素默认画柱（气候图习惯）。
+    """
+    raw = dict(((cmpc.get("element_styles") or {}).get(metric) or {}))
+    linestyles = list(cmpc.get("linestyle_cycle") or ["-"])
+    markers = list(cmpc.get("marker_cycle") or ["o"])
+    global_type = str(cmpc.get("chart_type", "smooth")).lower()
+    if raw.get("chart_type"):
+        chart_type = str(raw["chart_type"]).lower()
+    elif global_type != "smooth":
+        chart_type = global_type
+    else:
+        chart_type = "bar" if metric in RAIN_KEYS else global_type
+    return {
+        "chart_type": chart_type,
+        "linestyle": str(raw.get("linestyle") or linestyles[index % len(linestyles)]),
+        "marker": str(raw.get("marker") or markers[index % len(markers)]),
+    }
+
+
+# ---- 方案 A：多元素同图叠加 --------------------------------------------
+
+def _render_compare_overlay(cities: list[CityClimate], cfg: dict[str, Any],
+                            out_paths: list[Path], logger=None,
+                            report: Optional[dict[str, Any]] = None,
+                            metrics: list[str] = None) -> list[Path]:
+    """多元素叠加：颜色=城市、线型/标记=元素；气温走主轴、降水走副轴。"""
+    metrics = list(metrics or ["meanTemp"])
+    cmpc = cfg.get("compare") or {}
+    ordered = _compare_sort_cities(cities, cfg, _compare_sort_metric(cmpc, metrics))
+    alpha = float(cmpc.get("alpha", 1.0))
+    linewidth = float(cmpc.get("linewidth", 2.2))
+    markersize = float(cmpc.get("markersize", 5.0))
+    bar_width = float(cmpc.get("bar_width", 0.8))
+    colors = _compare_colors(ordered, cfg)
+    styles = {metric: _compare_metric_style(cmpc, metric, index)
+              for index, metric in enumerate(metrics)}
+
+    setup_style(cfg)
+    fig_cfg = cfg["figure"]
+    figsize = cmpc.get("figsize") or fig_cfg.get("figsize") or [12.0, 6.0]
+    fig = plt.figure(
+        figsize=(float(figsize[0]), float(figsize[1])),
+        dpi=float(cfg["output"].get("chart_dpi", fig_cfg.get("dpi", 144))),
+        facecolor=str(fig_cfg.get("facecolor", "#ffffff")),
+        edgecolor=str(fig_cfg.get("edgecolor", "none")),
+    )
+    ax = fig.add_subplot(111)
+    ax.set_facecolor(_resolve_axes_facecolor(cfg))
+    x = _configure_x_axis(ax, ordered[0], cfg)
+
+    rain_metrics = [m for m in metrics if m == "rainfall"]
+    tertiary_metrics = [m for m in metrics if m == "raindays"]
+    temp_metrics = [m for m in metrics if m not in RAIN_KEYS]
+    axis_map: dict[str, Any] = {"primary": ax, "secondary": None, "tertiary": None}
+    for axis_key in ("secondary", "tertiary"):
+        needed = rain_metrics if axis_key == "secondary" else tertiary_metrics
+        if not needed:
+            continue
+        extra = ax.twinx()
+        extra.set_facecolor("none")
+        extra.grid(False)
+        if axis_key == "tertiary":
+            offset = float(cfg["axes_tertiary"].get("offset_points", 62) or 0.0)
+            extra.spines["right"].set_position(("outward", offset))
+        axis_map[axis_key] = extra
+
+    # 序列按「城市 → 元素」收集，图例也按这个顺序（便于按城市/元素重排）
+    items: list[dict[str, Any]] = []
+    for city_index, city in enumerate(ordered):
+        for metric in metrics:
+            items.append({
+                "city": city, "metric": metric,
+                "values": _compare_values(city, cfg, metric),
+                "color": colors[city_index],
+                "axis": _metric_axis_key(metric),
+                "style": styles[metric],
+            })
+
+    # 柱宽按**全图**柱状序列数均分：主副轴都画柱时也并排而不是互相压住
+    bar_total = sum(1 for item in items if item["style"]["chart_type"] in BAR_CHART_TYPES)
+    bar_seen = 0
+
+    by_axis: dict[str, list[tuple[str, dict[str, Any], np.ndarray]]] = {a: [] for a in AXIS_KEYS}
+    for item in items:
+        by_axis[item["axis"]].append(
+            (item["metric"], {"chart_type": item["style"]["chart_type"]}, item["values"]))
+    bottom_key = _stack_axes(cfg, axis_map, by_axis)   # 折线轴在上、柱状轴在下（含底色归属）
+
+    handles: list[Any] = [None] * len(items)
+    label_cfg = {"data_labels": cmpc.get("data_labels")}
+    for item in sorted(items,
+                       key=lambda it: 0 if it["style"]["chart_type"] in BAR_CHART_TYPES else 1):
+        target = axis_map.get(item["axis"])
+        if target is None:
+            continue
+        is_bar = item["style"]["chart_type"] in BAR_CHART_TYPES
+        width = 0.0
+        offset = 0.0
+        if is_bar:
+            total = max(bar_total, 1)
+            width = bar_width / total
+            offset = (bar_seen - (total - 1) / 2.0) * width
+            bar_seen += 1
+        slot = items.index(item)
+        label = _compare_label(cmpc, cfg, item["city"],
+                               METRIC_SHORT_LABELS.get(item["metric"], item["metric"]),
+                               item["values"], multiple=True)
+        handles[slot] = _plot_compare_series(
+            target, x, item["values"], chart_type=item["style"]["chart_type"],
+            color=item["color"], linestyle=item["style"]["linestyle"],
+            marker=item["style"]["marker"], alpha=alpha, linewidth=linewidth,
+            markersize=markersize, bar_width=width, offset=offset, label=label)
+        _draw_data_labels(target, label_cfg, x, item["values"], item["color"])
+
+    axis_defaults = {"primary": (-0.075, "axes_primary"),
+                     "secondary": (1.075, "axes_secondary"),
+                     "tertiary": (1.155, "axes_tertiary")}
+    for axis_key, axis_metrics in (("primary", temp_metrics), ("secondary", rain_metrics),
+                                   ("tertiary", tertiary_metrics)):
+        target = axis_map.get(axis_key)
+        if target is None or not axis_metrics:
+            continue
+        default_x, cfg_key = axis_defaults[axis_key]
+        ax_cfg = dict(cfg[cfg_key])
+        ax_cfg["side"] = "left" if axis_key == "primary" else str(ax_cfg.get("side", "right"))
+        if not ax_cfg.get("label_text"):
+            ax_cfg["label_text"] = "、".join(METRIC_LABELS.get(m, m) for m in axis_metrics)
+        values = [it["values"] for it in items if it["axis"] == axis_key]
+        has_bar = any(it["style"]["chart_type"] in BAR_CHART_TYPES and it["axis"] == axis_key
+                      for it in items)
+        _configure_y_axis(target, ax_cfg, values, default_x=default_x,
+                          has_bar=has_bar, cfg=cfg, logger=logger)
+    if not temp_metrics:            # 全是降水元素：主轴只留横轴与底色，不画空刻度
+        ax.set_yticks([])
+        ax.spines["left"].set_visible(False)
+
+    grid_cfg = fig_cfg.get("grid") or {}
+    if grid_cfg.get("show", True):
+        _draw_grid(ax, axis_map, bottom_key, grid_cfg)
+    ax.set_axisbelow(True)
+    _draw_zeroline(ax, cfg)
+
+    context = _compare_context(ordered, cfg, metrics)
+    title_cfg = dict(fig_cfg.get("title") or {})
+    title_cfg["text"] = str(cmpc.get("title_text_multi") or "{metrics}对比 · {city}")
+    try:
+        title = title_cfg["text"].format(**context)
+    except (KeyError, IndexError, ValueError):
+        title = title_cfg["text"]
+    # position=top 时图例排在标题之上，此时标题改用整图标题，形成「标题 → 图例 → 图」的顺序
+    legend_position = str((cmpc.get("legend") or {}).get("position", "bottom")).lower()
+    title_in_figure = legend_position == "top"
+    sub_cfg = fig_cfg.get("subtitle") or {}
+    sub_text = ""
+    if sub_cfg.get("show"):
+        try:
+            sub_text = str(sub_cfg.get("text", "")).format(**context)
+        except (KeyError, IndexError, ValueError):
+            sub_text = str(sub_cfg.get("text", ""))
+    if title_in_figure:
+        fig.suptitle(title, fontsize=float(title_cfg.get("fontsize", 16)),
+                     color=str(title_cfg.get("color", "#2c3e50")),
+                     fontweight=str(title_cfg.get("fontweight", "bold")), y=0.985)
+        if sub_text.strip():
+            fig.text(0.5, 0.935, sub_text, ha="center", va="top",
+                     fontsize=float(sub_cfg.get("fontsize", 10.5)),
+                     color=str(sub_cfg.get("color", "#596679")))
+    else:
+        ax.set_title(
+            title,
+            fontsize=float(title_cfg.get("fontsize", 16)),
+            color=str(title_cfg.get("color", "#2c3e50")),
+            fontweight=str(title_cfg.get("fontweight", "bold")),
+            pad=float(title_cfg.get("pad", 14)),
+            loc=str(title_cfg.get("loc", "center")),
+        )
+        if sub_text.strip():
+            ax.text(0.5, 1.0, sub_text, transform=ax.transAxes, ha="center", va="bottom",
+                    fontsize=float(sub_cfg.get("fontsize", 10.5)),
+                    color=str(sub_cfg.get("color", "#596679")), clip_on=False)
+
+    _add_credit(fig, cfg, context)
+    _apply_layout(fig, cfg)
+
+    layout = str((cmpc.get("legend") or {}).get("layout", "city")).lower()
+    legend_handles, ncol = _compare_legend_grid(handles, layout, len(metrics), len(ordered))
+    _add_compare_legend(ax, legend_handles, cfg, ncol=ncol, figure_anchor=title_in_figure)
+
+    if report is not None:
+        labels = [METRIC_LABELS.get(m, m) for m in metrics]
+        report["series"] = labels
+        report["metric"] = "、".join(labels)
+        report["metrics"] = labels
+        report["mode"] = "overlay"
+        report["city_count"] = len(ordered)
+        report["legend_layout"] = layout
+    return _save(fig, out_paths, cfg)
+
+
+# ---- 方案 B：多元素分面（一个元素一格） --------------------------------
+
+def _draw_compare_metric_panel(ax, cities: list[CityClimate], cfg: dict[str, Any],
+                               metric: str, logger=None,
+                               share: Optional[dict[str, Any]] = None) -> list[Any]:
+    """分面里的一格：格内多个城市对比**同一个元素**。
+
+    ``share`` 为同一行内同单位元素共用的量程（``{"values": [...], "has_bar": bool}``），
+    由 :func:`_render_compare_facet` 预先算好，便于横向比较同行各格。
+    """
+    cmpc = cfg.get("compare") or {}
+    chart_type = str(cmpc.get("chart_type", "smooth")).lower()
+    alpha = float(cmpc.get("alpha", 1.0))
+    linewidth = float(cmpc.get("linewidth", 2.2))
+    markersize = float(cmpc.get("markersize", 5.0))
+    bar_width = float(cmpc.get("bar_width", 0.8))
+    colors = _compare_colors(cities, cfg)
+    linestyles = list(cmpc.get("linestyle_cycle") or ["-"])
+    markers = list(cmpc.get("marker_cycle") or ["o"])
+    label_cfg = {"data_labels": cmpc.get("data_labels")}
+    x = _configure_x_axis(ax, cities[0], cfg)
+    total = max(len(cities), 1)
+    width = bar_width / total
+    all_values: list[np.ndarray] = []
+    handles: list[Any] = []
+    for index, city in enumerate(cities):
+        values = _compare_values(city, cfg, metric)
+        all_values.append(values)
+        label = _compare_label(cmpc, cfg, city, METRIC_SHORT_LABELS.get(metric, metric),
+                               values, multiple=False)
+        offset = ((index - (total - 1) / 2.0) * width) if chart_type in BAR_CHART_TYPES else 0.0
+        handles.append(_plot_compare_series(
+            ax, x, values, chart_type=chart_type, color=colors[index],
+            linestyle=linestyles[index % len(linestyles)], marker=markers[index % len(markers)],
+            alpha=alpha, linewidth=linewidth, markersize=markersize,
+            bar_width=width, offset=offset, label=label))
+        _draw_data_labels(ax, label_cfg, x, values, colors[index])
+
+    axis_key = _metric_axis_key(metric)
+    ax_cfg = dict(cfg["axes_secondary" if axis_key == "secondary" else "axes_primary"])
+    ax_cfg["side"] = "left"
+    # 一格只画一个元素，纵轴标题直接用「元素名 (单位)」，避免复用「降水 (毫米)」这类泛指
+    ax_cfg["label_text"] = _metric_axis_label(metric, cfg, cities[0] if cities else None)
+    shared = share or {}
+    _configure_y_axis(ax, ax_cfg, shared.get("values") or all_values, default_x=-0.075,
+                      has_bar=bool(shared.get("has_bar", chart_type in BAR_CHART_TYPES)),
+                      cfg=cfg, logger=logger)
+
+    grid_cfg = cfg["figure"].get("grid") or {}
+    if grid_cfg.get("show", True):
+        ax.grid(True, axis=str(grid_cfg.get("axis", "y")),
+                color=str(grid_cfg.get("color", "#c9d3dd")),
+                linestyle=str(grid_cfg.get("linestyle", "--")),
+                linewidth=float(grid_cfg.get("linewidth", 0.7)),
+                alpha=float(grid_cfg.get("alpha", 0.75)), zorder=0)
+    ax.set_axisbelow(True)
+    _draw_zeroline(ax, cfg)
+    return handles
+
+
+def _render_compare_facet(cities: list[CityClimate], cfg: dict[str, Any],
+                          out_paths: list[Path], logger=None,
+                          report: Optional[dict[str, Any]] = None,
+                          metrics: list[str] = None) -> list[Path]:
+    """多元素分面：一个元素一格，格内多城市对比；整图只有一个图例。"""
+    metrics = list(metrics or ["meanTemp"])
+    cmpc = cfg.get("compare") or {}
+    ordered = _compare_sort_cities(cities, cfg, _compare_sort_metric(cmpc, metrics))
+
+    cols, rows = resolve_grid({"grid": cmpc.get("grid", "auto")}, len(metrics))
+    cols = max(1, min(cols or len(metrics), len(metrics)))
+    rows = max(1, rows or 1)
+    while cols * rows < len(metrics):        # 显式网格放不下时自动加行
+        rows += 1
+
+    # 同一行内**同单位元素**共用一套纵轴量程（温度与降水互不影响）
+    chart_type = str(cmpc.get("chart_type", "smooth")).lower()
+    shares: list[dict[str, Any]] = []
+    share_ylim = str(cmpc.get("share_ylim", "row")).lower() != "none"
+    for row in range(rows):
+        row_share: dict[str, Any] = {}
+        if share_ylim:
+            for col in range(cols):
+                index = row * cols + col
+                if index >= len(metrics):
+                    continue
+                axis_key = _metric_axis_key(metrics[index])
+                slot = row_share.setdefault(axis_key, {"values": [], "has_bar": False})
+                slot["values"].extend(_compare_values(city, cfg, metrics[index])
+                                      for city in ordered)
+                slot["has_bar"] = slot["has_bar"] or chart_type in BAR_CHART_TYPES
+        shares.append(row_share)
+
+    setup_style(cfg)
+    fig_cfg = cfg["figure"]
+    base = cmpc.get("figsize") or fig_cfg.get("figsize") or [12.0, 6.0]
+    facet_figsize = cmpc.get("facet_figsize")
+    if isinstance(facet_figsize, (list, tuple)) and len(facet_figsize) == 2:
+        figsize = (float(facet_figsize[0]), float(facet_figsize[1]))
+    else:
+        figsize = (float(base[0]) * 0.7 * cols, float(base[1]) * rows)
+    fig = plt.figure(
+        figsize=figsize,
+        dpi=float(cfg["output"].get("chart_dpi", fig_cfg.get("dpi", 144))),
+        facecolor=str(fig_cfg.get("facecolor", "#ffffff")),
+        edgecolor=str(fig_cfg.get("edgecolor", "none")),
+    )
+    cells = fig.subplots(rows, cols, squeeze=False)
+    title_cfg = dict(fig_cfg.get("title") or {})
+    first_ax = None
+    first_handles: list[Any] = []
+    drawn = 0
+    for index, metric in enumerate(metrics):
+        row, col = divmod(index, cols)
+        ax = cells[row][col]
+        try:
+                handles = _draw_compare_metric_panel(
+                ax, ordered, cfg, metric, logger,
+                share=shares[row].get(_metric_axis_key(metric)))
+        except ChartError as exc:            # 单个元素画不出内容不拖垮整幅
+            ax.set_visible(False)
+            if logger:
+                logger.warning(f"对比元素 {metric} 跳过：{exc}")
+            continue
+        drawn += 1
+        ax.set_title(
+            METRIC_LABELS.get(metric, metric),
+            fontsize=float(title_cfg.get("fontsize", 16)) * 0.8,
+            color=str(title_cfg.get("color", "#2c3e50")),
+            fontweight=str(title_cfg.get("fontweight", "bold")),
+            pad=float(title_cfg.get("pad", 14)) * 0.6,
+        )
+        if first_ax is None:
+            first_ax, first_handles = ax, handles
+    for index in range(len(metrics), cols * rows):
+        row, col = divmod(index, cols)
+        cells[row][col].set_visible(False)
+    if first_ax is None:
+        plt.close(fig)
+        raise ChartError("所有对比元素都没有可绘制的数据")
+
+    context = _compare_context(ordered, cfg, metrics)
+    title_text = str(cmpc.get("title_text_multi") or "{metrics}对比 · {city}")
+    try:
+        fig_title = title_text.format(**context)
+    except (KeyError, IndexError, ValueError):
+        fig_title = title_text
+    fig.suptitle(fig_title, fontsize=float(title_cfg.get("fontsize", 16)),
+                 color=str(title_cfg.get("color", "#2c3e50")),
+                 fontweight=str(title_cfg.get("fontweight", "bold")), y=0.985)
+    sub_cfg = fig_cfg.get("subtitle") or {}
+    has_subtitle = False
+    if sub_cfg.get("show"):
+        try:
+            sub_text = str(sub_cfg.get("text", "")).format(**context)
+        except (KeyError, IndexError, ValueError):
+            sub_text = str(sub_cfg.get("text", ""))
+        if sub_text.strip():
+            fig.text(0.5, 0.935, sub_text, ha="center", va="top",
+                     fontsize=float(sub_cfg.get("fontsize", 10.5)),
+                     color=str(sub_cfg.get("color", "#596679")))
+            has_subtitle = True
+
+    _add_credit(fig, cfg, context)
+    _apply_layout(fig, cfg)
+    # 分面里每格都有自己的标题与横轴刻度，间距必须比 tight_layout 给的更大
+    fig.subplots_adjust(
+        top=0.87 if has_subtitle else 0.905,
+        hspace=float(cmpc.get("hspace") or 0.34),
+        wspace=float(cmpc.get("wspace") or 0.22),
+    )
+
+    layout = str((cmpc.get("legend") or {}).get("layout", "city")).lower()
+    if layout == "metric":                   # 分面里每格只有一个元素，图例只有城市维度
+        if logger:
+            logger.debug("分面模式下图例只按城市排列，compare.legend.layout=metric 已按 city 处理")
+        layout = "city"
+    _add_compare_legend(first_ax, first_handles, cfg, ncol=len(ordered), figure_anchor=True)
+
+    if report is not None:
+        labels = [METRIC_LABELS.get(m, m) for m in metrics]
+        report["series"] = labels
+        report["metric"] = "、".join(labels)
+        report["metrics"] = labels
+        report["mode"] = "facet"
+        report["grid"] = f"{cols}x{rows}"
+        report["drawn"] = drawn
+        report["city_count"] = len(ordered)
+        report["legend_layout"] = layout
+    return _save(fig, out_paths, cfg)
+
+
+# ---- 主入口：多城市对比 ------------------------------------------------
+
+def render_comparison_chart(cities: list[CityClimate], cfg: dict[str, Any],
+                            out_paths: list[Path], logger=None,
+                            report: Optional[dict[str, Any]] = None) -> list[Path]:
+    """多城市对比入口。
+
+    * 单元素（``compare.metrics`` 只有 1 项，或只给了 ``compare.metric``）→ 沿用原单图实现，
+      产物与改造前完全一致；
+    * 多元素 → 按 ``compare.mode`` 分派：``facet``（一格一元素，默认）或 ``overlay``（同图叠加）。
+    """
+    usable = [c for c in cities if c.has_climate]
+    if not usable:
+        raise ChartError("参与对比的城市都没有气候数据，无法绘图")
+    metrics = compare_metrics(cfg)
+    if len(metrics) == 1:
+        return _render_compare_single(usable, cfg, out_paths, logger, report, metrics[0])
+    mode = str((cfg.get("compare") or {}).get("mode", "facet")).lower()
+    if mode == "overlay":
+        return _render_compare_overlay(usable, cfg, out_paths, logger, report, metrics)
+    return _render_compare_facet(usable, cfg, out_paths, logger, report, metrics)

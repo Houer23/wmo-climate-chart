@@ -59,7 +59,9 @@ profiles:
 `{city}` 城市名 · `{city_id}` 编号 · `{member}` 国家/地区 · `{org}` 气象机构 ·
 `{station}` 测站名 · `{period}` 统计时段 · `{lat}` `{lon}` 经纬度 ·
 `{temp_unit}` 温度单位 · `{rain_unit}` 降水单位 · `{profile}` 配置名 ·
-对比图另支持 `{metric}`（对比元素名）· `{city_count}`（城市数）
+对比图另支持 `{metric}`（对比元素名；多元素时为 `minTemp-rainfall`，叠加再带 `_overlay`）·
+`{metrics}`（同 `{metric}`，但始终用 `-` 连接全部元素）· `{mode}`（`facet`/`overlay`）·
+`{city_count}`（城市数）
 
 > `{lat}` / `{lon}` 的**显示文案由 `data.coord` 决定**（方向符号、单位、小数位），
 > 数据本身始终是数值：例如默认输出 `39.93°N` / `116.28°E`，`style: signed` 时为
@@ -333,20 +335,34 @@ profiles:
 
 | 键 | 类型 | 默认 | 说明 |
 |---|---|---|---|
-| `metric` | str | `"meanTemp"` | 对比元素 |
-| `chart_type` | str | `"smooth"` | 对比图形类型（`rainfall` 时常配 `bar`） |
-| `figsize` | [宽,高] | `[12.0, 6.0]` | 对比图画布 |
-| `title_text` | str 模板 | `"{metric}对比 · {city}"` | 对比图标题 |
+| `metric` | str | `"meanTemp"` | 单元素对比元素 |
+| `metrics` | array | `[]` | **多元素**对比元素（保序去重，最多 4 个）；非空时覆盖 `metric` |
+| `mode` | str | `"facet"` | 多元素呈现：`facet` 一格一元素 / `overlay` 同图叠加（颜色=城市、线型标记=元素，气温主轴、降水副轴） |
+| `grid` | str | `"auto"` | `facet` 排版：`auto` = 1×N；`"2x2"` = 2 列 2 行（前=列、后=行） |
+| `facet_figsize` | [宽,高] | `null` | `facet` 画布；`null` = 每格约 `compare.figsize` 的 70% 宽 |
+| `share_ylim` | str | `"row"` | `facet`：同一行**同单位**元素共用纵轴量程；`none` 各格独立 |
+| `hspace` / `wspace` | float | `null` | `facet` 子图间距；`null` = 0.34 / 0.22 |
+| `sort_metric` | str | `""` | 多元素排序基准；空 = 用第一个元素（保证各格城市顺序一致） |
+| `chart_type` | str | `"smooth"` | 对比图形类型（`rainfall` 时常配 `bar`）；多元素时作为 `element_styles` 的兜底 |
+| `element_styles` | obj | 见下 | `overlay` 下按元素区分样式：`{元素: {chart_type, linestyle, marker}}`；`chart_type: null` = 跟随 `compare.chart_type`（仍是默认 `smooth` 时降水类画柱） |
+| `legend.layout` | str | `"city"` | 图例排列：`city` 同城一行 / `metric` 同要素一行 / `auto` 自然顺序 |
+| `legend.position` | str | `"bottom"` | `inside` 坐标区内 / `bottom` 横轴下方 / `top` 标题下方（整图居中） |
+| `legend.gap` | float | `0.10` | 图例与横轴的距离（`inside` 时为坐标区内的相对位置；坐标区高度比例） |
+| `legend.reserve` | float | `0.24` | `bottom` 时预留的下边距（整图比例），给图例腾位置 |
+| `legend.ncol` | int | `0` | 图例列数；`0` = 按 `layout` 自动 |
+| `figsize` | [宽,高] | `[12.0, 6.0]` | 对比图画布（`facet` 时为每格基准） |
+| `title_text` | str 模板 | `"{metric}对比 · {city}"` | 单元素标题 |
+| `title_text_multi` | str 模板 | `"{metrics}对比 · {city}"` | 多元素标题；可用 `{metrics}` / `{metric_count}` |
 | `colors` | array | 8 色 | 按顺序分配给城市 |
 | `color_map` | obj | `{}` | 显式指定「城市名 → 颜色」，优先于 `colors` |
 | `color_by` | str | `"order"` | `order` 按传入顺序 / `city_id` 按编号取色 |
 | `linestyle_cycle` / `marker_cycle` | array | 4 种 / 8 种 | 线型与标记循环 |
 | `linewidth` / `markersize` / `alpha` | — | `2.2` / `5.0` / `1.0` | 线条样式 |
-| `bar_width` | float | `0.8` | 柱状模式总柱宽（内部按城市数均分） |
+| `bar_width` | float | `0.8` | 柱状模式总柱宽（内部按城市/元素数均分） |
 | `sort_by` | str | `"value_desc"` | `none` / `value_desc` / `value_asc` / `name` / `city_id` |
 | `show_value_range` | bool | `true` | 图例中附加该城市的数值范围 |
-| `label_template` | str 模板 | `"{city}"` | 图例名模板 |
-| `legend_ncol` | int | `0` | 图例列数；`0` 自动 |
+| `label_template` | str 模板 | `"{city}"` | 图例名模板；多元素时可用 `{metric}`（未写则自动补「· 元素名」） |
+| `legend_ncol` | int | `0` | 图例列数（旧键，`legend.ncol` 优先）；`0` 自动 |
 | `data_labels.show` / `.fontsize` / `.format` / `.offset` | — | `false` / `8.0` / `"{:.1f}"` / `4.0` | 对比图数值标签 |
 
 ## J. `multi` — 多图（多城市同画布）

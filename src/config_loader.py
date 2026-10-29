@@ -133,6 +133,12 @@ SERIES_DEFAULTS: dict[str, dict[str, Any]] = {
     ),
 }
 
+#: 多城市对比可用的元素（顺序即「同要素一行」图例的默认列序）
+COMPARE_METRIC_KEYS: tuple[str, ...] = ("minTemp", "maxTemp", "meanTemp", "rainfall", "raindays")
+#: 一次最多对比的元素个数（再多格子/线条就看不清了）
+COMPARE_METRICS_MAX = 4
+
+
 DEFAULTS: dict[str, Any] = {
     "profile_name": "default",
     "profile_description": "",
@@ -492,9 +498,18 @@ DEFAULTS: dict[str, Any] = {
     # ================= H. 多城市对比图 =================
     "compare": {
         "metric": "meanTemp",               # 对比元素：minTemp|maxTemp|meanTemp|rainfall|raindays
+        "metrics": [],                      # 多元素对比（非空时覆盖 metric，保序去重，最多 4 个）
+        "mode": "facet",                    # 多元素呈现：facet 一格一元素 | overlay 同图叠加
+        "grid": "auto",                     # facet 排版：auto = 1×N；"列x行" 如 2x2
+        "facet_figsize": None,              # facet 画布尺寸；null = 每格约 compare.figsize 的 70% 宽
+        "share_ylim": "row",                # facet：同一行同单位元素共用纵轴量程；none 各自独立
+        "hspace": None,                     # facet 子图纵向间距；null = 0.34
+        "wspace": None,                     # facet 子图横向间距；null = 0.22
+        "sort_metric": "",                  # 多元素排序基准（空 = 第一个元素）
         "chart_type": "smooth",             # 对比曲线类型（rainfall 时可选 bar）
         "figsize": [12.0, 6.0],
         "title_text": "{metric}对比 · {city}",
+        "title_text_multi": "{metrics}对比 · {city}",
         "colors": [                         # 按顺序分配给城市；不足则循环或自动生成
             "#d85a30", "#185fa5", "#3b6d11", "#993556",
             "#854f0b", "#0f6e56", "#534ab7", "#a32d2d",
@@ -510,6 +525,23 @@ DEFAULTS: dict[str, Any] = {
         "show_value_range": True,           # 图例中显示该城市该元素的范围
         "label_template": "{city}",
         "legend_ncol": 0,
+        # 多元素叠加时按元素区分的样式（overlay 用）。chart_type 留空 = 跟随 compare.chart_type，
+        # 跟随状态下默认让降水类画柱、气温类画线（更接近气候图习惯）
+        "element_styles": {
+            "minTemp": {"chart_type": None, "linestyle": "-", "marker": "o"},
+            "maxTemp": {"chart_type": None, "linestyle": "--", "marker": "s"},
+            "meanTemp": {"chart_type": None, "linestyle": "-.", "marker": "^"},
+            "rainfall": {"chart_type": None, "linestyle": "-", "marker": "v"},
+            "raindays": {"chart_type": None, "linestyle": ":", "marker": "D"},
+        },
+        # 多元素图例：排列方式与位置
+        "legend": {
+            "position": "bottom",           # inside 坐标区内（沿用 figure.legend 定位）| bottom 横轴下方 | top 坐标区上方
+            "gap": 0.10,                    # 与横轴的距离，单位 = 坐标区高度比例
+            "reserve": 0.24,                # position=bottom 时预留的下边距（整图比例）
+            "layout": "city",               # city 同城一行 | metric 同要素一行 | auto 按自然顺序
+            "ncol": 0,                      # 0 = 按 layout 自动
+        },
         "data_labels": {
             "show": False,
             "fontsize": 8.0,
@@ -625,6 +657,35 @@ def resolve_grid(multi_cfg: Any, city_count: int) -> tuple[int, int]:
     if cols <= 0 or rows <= 0:
         return max(1, int(city_count)), 1
     return cols, rows
+
+
+def compare_metrics(cfg: dict[str, Any]) -> list[str]:
+    """解析多城市对比的元素列表。
+
+    ``compare.metrics``（数组）优先；为空时回退单值的 ``compare.metric``。结果**保序去重**
+    并规范化为规范键（``ppt`` → ``rainfall`` 等）；无法识别时抛 :class:`ConfigError`。
+    """
+    cmpc = cfg.get("compare") or {}
+    raw = cmpc.get("metrics") or []
+    if isinstance(raw, str):
+        raise ConfigError("compare.metrics 必须是数组（如 [minTemp, rainfall]）；"
+                          "单个元素请用 compare.metric")
+    if not raw:
+        raw = [cmpc.get("metric", "meanTemp")]
+    keys: list[str] = []
+    for item in raw:
+        try:
+            key = normalize_series_key(str(item))
+        except KeyError as exc:
+            raise ConfigError(f"对比元素无法识别：{item}"
+                              f"（可选 {'/'.join(COMPARE_METRIC_KEYS)}）") from exc
+        if key not in keys:
+            keys.append(key)
+    if not keys:
+        return ["meanTemp"]
+    if len(keys) > COMPARE_METRICS_MAX:
+        raise ConfigError(f"一次最多对比 {COMPARE_METRICS_MAX} 个元素（当前 {len(keys)} 个）")
+    return keys
 
 
 # ---- --mark 绘图微调 ---------------------------------------------------
@@ -1175,7 +1236,42 @@ def validate_config(cfg: dict[str, Any]) -> list[str]:
         except (TypeError, ValueError) as exc:
             raise ConfigError(f"multi.{key} 必须是数字或 null（当前：{multi[key]!r}）") from exc
 
-    # 9) 请求层：DNS 预解析超时（0 表示关闭预检查）
+    # 9) 多城市对比（单元素 / 多元素）
+    compare_metrics(cfg)                     # 元素非法、超出上限时在此抛 ConfigError
+    cmpc = cfg.get("compare") or {}
+    compare_mode = str(cmpc.get("mode", "facet")).lower()
+    if compare_mode not in ("facet", "overlay"):
+        raise ConfigError("compare.mode 只能是 facet（一格一元素，默认）"
+                          f"或 overlay（同一张图叠加）（当前：{cmpc.get('mode')}）")
+    try:
+        parse_grid(cmpc.get("grid", "auto"))
+    except ConfigError as exc:
+        raise ConfigError(f"compare.grid：{exc}") from exc
+    compare_share = str(cmpc.get("share_ylim", "row")).lower()
+    if compare_share not in ("row", "none"):
+        raise ConfigError("compare.share_ylim 只能是 row（同一行同单位元素共用纵轴量程，默认）"
+                          f"或 none（各格独立）（当前：{cmpc.get('share_ylim')}）")
+    facet_figsize = cmpc.get("facet_figsize")
+    if facet_figsize is not None and (
+            not isinstance(facet_figsize, (list, tuple)) or len(facet_figsize) != 2):
+        raise ConfigError("compare.facet_figsize 必须是 [宽, 高] 或 null"
+                          f"（null = 按 compare.figsize 自动推算）（当前：{facet_figsize!r}）")
+    cmp_legend = cmpc.get("legend")
+    if cmp_legend is not None and not isinstance(cmp_legend, dict):
+        raise ConfigError("compare.legend 必须是对象")
+    cmp_legend = cmp_legend or {}
+    cmp_legend_layout = str(cmp_legend.get("layout", "city")).lower()
+    if cmp_legend_layout not in ("city", "metric", "auto"):
+        raise ConfigError("compare.legend.layout 只能是 city（同城一行，默认）"
+                          "/ metric（同要素一行）/ auto（自然顺序）"
+                          f"（当前：{cmp_legend.get('layout')}）")
+    cmp_legend_pos = str(cmp_legend.get("position", "bottom")).lower()
+    if cmp_legend_pos not in ("inside", "bottom", "top"):
+        raise ConfigError("compare.legend.position 只能是 inside（坐标区内）"
+                          "/ bottom（横轴下方，默认）/ top（坐标区上方）"
+                          f"（当前：{cmp_legend.get('position')}）")
+
+    # 10) 请求层：DNS 预解析超时（0 表示关闭预检查）
     raw_resolve = cfg["fetch"].get("resolve_timeout", 0) or 0
     try:
         resolve_timeout = float(raw_resolve)

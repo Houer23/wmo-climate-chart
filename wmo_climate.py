@@ -128,7 +128,12 @@ def build_parser() -> argparse.ArgumentParser:
     target.add_argument("--compare", action="append", default=[], metavar="ID或名称",
                         help="多城市对比：可传 cityId 或城市名，重复传入多个")
     target.add_argument("--compare-metric", metavar="元素",
-                        help="对比元素：minTemp/maxTemp/meanTemp/rainfall/raindays")
+                        help="对比元素：minTemp/maxTemp/meanTemp/rainfall/raindays；"
+                             "可用逗号一次给多个（如 --compare-metric minTemp,maxTemp）"
+                             "做多元素对比，最多 4 个")
+    target.add_argument("--compare-mode", choices=["facet", "overlay"],
+                        help="多元素呈现方式：facet 一格一元素（默认）/ overlay 同一张图叠加"
+                             "（颜色=城市、线型=元素，气温主轴、降水副轴）")
     target.add_argument("--cities", action="append", default=[], metavar="ID或名称",
                         help="多图：把多个城市画在**同一张画布**上，可传 cityId 或城市名，"
                              "逗号分隔或重复传入（如 --cities 北京,香港,莫斯科）；"
@@ -220,9 +225,14 @@ def _parse_overrides(raw_items: list[str], args: argparse.Namespace) -> list[tup
     if args.rain_unit:
         overrides.append(("data.rain_unit", args.rain_unit))
     if args.compare_metric:
-        overrides.append(("compare.metric", args.compare_metric))
+        metrics = _split_targets([args.compare_metric])
+        overrides.append(("compare.metrics", metrics))     # 多元素：保序去重交给配置校验
+        if len(metrics) == 1:
+            overrides.append(("compare.metric", metrics[0]))  # 单元素：保持旧键同步
+    if args.compare_mode:
+        overrides.append(("compare.mode", args.compare_mode))
     if args.grid:
-        overrides.append(("multi.grid", args.grid))
+        overrides.append(("compare.grid" if args.compare else "multi.grid", args.grid))
     if args.no_chart:
         overrides.append(("output.chart_formats", []))
     if args.no_table:
